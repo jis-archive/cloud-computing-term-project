@@ -1,6 +1,6 @@
 # 모의면접 감정 분석 시스템
 
-## 📁 구조
+## 구조
 ```
 interview-emotion/
 ├── backend/
@@ -10,7 +10,7 @@ interview-emotion/
     └── index.html        # 웹 클라이언트
 ```
 
-## 🚀 설치 & 실행
+## 설치 & 실행
 
 ### 1. 파이썬 가상환경 생성
 ```bash
@@ -23,7 +23,7 @@ source venv/bin/activate       # Windows: venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
-> ⏱ DeepFace는 첫 실행 시 모델 파일을 자동 다운로드합니다 (~500MB)
+>  DeepFace는 첫 실행 시 모델 파일을 자동 다운로드합니다 (~500MB)
 
 ### 3. 서버 실행
 ```bash
@@ -39,7 +39,7 @@ frontend/index.html 를 브라우저에서 직접 열거나
 
 ---
 
-## 🧠 감정 → 지표 변환 공식
+## 감정 지표 변환 공식
 
 | 지표 | 사용 감정 |
 |------|-----------|
@@ -47,9 +47,14 @@ frontend/index.html 를 브라우저에서 직접 열거나
 | 긴장도 | fear + sad + angry |
 | 안정도 | 100 - 긴장도 |
 
----
+긴장도가 잘 인식되지 않는 경우, 긴장도에 가중치를 좀 더 가할 예정.
 
-## ⚡ CPU 성능 팁
+---
+## 화면 예시
+![자신감](./image/예시_자신감.png)
+![중립(양호](./image/예시_중립(양호).png)
+![긴장도](./image/예시_긴장도.png)
+##  CPU 성능 
 
 | 설정 | 내용 |
 |------|------|

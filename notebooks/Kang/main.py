@@ -23,21 +23,16 @@ app.add_middleware(
 # ── 감정 → 자신감 / 긴장도 변환 ──────────────────────────────────────────────
 
 def calc_metrics(emotions: dict) -> dict:
-    """
-    DeepFace 7감정 → 자신감 / 긴장도 / 안정도
-    emotions 값은 0~100 퍼센트
-    """
-    confidence = emotions.get("happy", 0) + emotions.get("neutral", 0)
-    tension    = emotions.get("fear", 0)  + emotions.get("sad", 0) + emotions.get("angry", 0)
-    stability  = max(0, 100 - tension)    # 부가 지표: 안정도
+    confidence = float(emotions.get("happy", 0) + emotions.get("neutral", 0))
+    tension    = float(emotions.get("fear", 0)  + emotions.get("sad", 0) + emotions.get("angry", 0))
+    stability  = float(max(0, 100 - tension))
 
     return {
         "confidence": round(min(confidence, 100), 1),
         "tension":    round(min(tension,    100), 1),
         "stability":  round(stability,            1),
-        "raw":        {k: round(v, 1) for k, v in emotions.items()},
+        "raw":        {k: round(float(v), 1) for k, v in emotions.items()},
     }
-
 
 def decode_frame(b64_data: str) -> np.ndarray:
     """Base64 이미지 → OpenCV ndarray"""
