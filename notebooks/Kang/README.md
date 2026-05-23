@@ -23,7 +23,6 @@ source venv/bin/activate       # Windows: venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
->  DeepFace는 첫 실행 시 모델 파일을 자동 다운로드합니다 (~500MB)
 
 ### 3. 서버 실행
 ```bash
@@ -34,7 +33,8 @@ python main.py
 ### 4. 프론트엔드 열기
 ```
 frontend/index.html 를 브라우저에서 직접 열거나
-로컬 서버로 서빙: python -m http.server 3000 (frontend/ 폴더 안에서)
+로컬 서버로 서빙: python -m http.server 3000 
+(혹은 새로운 터미널에서) open notebooks/Kang/index.html
 ```
 
 ---
