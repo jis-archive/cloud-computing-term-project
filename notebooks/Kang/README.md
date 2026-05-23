@@ -51,11 +51,11 @@ frontend/index.html 를 브라우저에서 직접 열거나
 
 ---
 ## 화면 예시
-![자신감](./image/예시_자신감.png)
-![중립(양호](./image/예시_중립(양호).png)
-![긴장도](./image/예시_긴장도.png)
-##  CPU 성능 
+![자신감](./image/%EC%98%88%EC%8B%9C_%EC%9E%90%EC%8B%A0%EA%B0%90.png)
+![중립(양호](./image/%EC%98%88%EC%8B%9C_%EC%A4%91%EB%A6%BD(%EC%96%91%ED%98%B8).png)
+![긴장도](./image/%EC%98%88%EC%8B%9C_%EA%B8%B4%EC%9E%A5%EB%8F%84.png)
 
+##  CPU 성능 
 | 설정 | 내용 |
 |------|------|
 | `detector_backend` | `"opencv"` (가장 빠름) |
