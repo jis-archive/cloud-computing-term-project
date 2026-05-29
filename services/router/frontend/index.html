@@ -529,21 +529,28 @@
       <div class="card-title">추이 그래프</div>
       <canvas id="history-canvas"></canvas>
     </div>
-
+    <input type="file" accept="video/mp4,video/webm,audio/*"
+       onchange="handleFileUpload(event)">
+    <span id="upload-status"></span>
   </div>
 </main>
 
 <script>
 // ── 설정 ──────────────────────────────────────────────────────────────────
-const WS_URL  = "ws://localhost:8000/ws/video";
-const LLM_URL = "http://localhost:8000/feedback";
-const TRANSCRIBE_URL = "http://localhost:8000/transcribe";  // mp4 업로드용
+const WS_PROTOCOL  = location.protocol === "https:" ? "wss" : "ws";
+const HTTP_PROTOCOL = location.protocol === "https:" ? "https" : "http";
+const BASE_WS  = `${WS_PROTOCOL}://${location.host}`;
+const BASE_HTTP = `${HTTP_PROTOCOL}://${location.host}`;
+
+const WS_URL         = `${BASE_WS}/ws/video`;
+const LLM_URL        = `${BASE_HTTP}/feedback`;
+const TRANSCRIBE_URL = `${BASE_HTTP}/transcribe`;
 
 const EMOTION_LABELS = { angry:"분노", disgust:"혐오", fear:"두려움", happy:"행복", sad:"슬픔", surprise:"놀람", neutral:"중립" };
 const EMOTION_COLORS = { angry:"#ef4444", disgust:"#a855f7", fear:"#f59e0b", happy:"#10b981", sad:"#3b82f6", surprise:"#06b6d4", neutral:"#94a3b8" };
 
 let latestEmotionResult = null;
-let latestSttResult     = null;   // STT 변환 완료 후 채워짐
+let latestSttResult     = null;
 
 let ws         = null;
 let stream     = null;
@@ -554,17 +561,12 @@ let historyTens = [];
 const MAX_HISTORY = 30;
 
 // ── mp4 파일 업로드 → STT ─────────────────────────────────────────────────
-/**
- * <input type="file" accept="video/mp4,audio/*" onchange="handleFileUpload(event)">
- * 같은 파일 인풋과 연결해서 사용합니다.
- */
 async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   console.log(`[Upload] 파일 선택: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`);
 
-  // 로딩 표시
   const statusEl = document.getElementById("upload-status");
   if (statusEl) statusEl.textContent = "STT 변환 중...";
 
@@ -582,11 +584,9 @@ async function handleFileUpload(event) {
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
 
-    // 응답 구조: { text, language, duration, latency_ms, type }
     const result = await resp.json();
     console.log("[Upload] STT 완료:", result);
 
-    // latestSttResult 를 실시간 마이크와 동일한 구조로 저장
     latestSttResult = {
       text:     result.text     ?? "",
       language: result.language ?? "ko",
@@ -597,7 +597,6 @@ async function handleFileUpload(event) {
       statusEl.textContent = `변환 완료 (${result.latency_ms} ms) — "${result.text.slice(0, 40)}..."`;
     }
 
-    // 감정 데이터도 준비됐으면 즉시 피드백 요청
     if (latestEmotionResult) {
       openModal();
     }
@@ -629,7 +628,7 @@ async function startCamera() {
     document.getElementById("btn-start").disabled = true;
     document.getElementById("btn-stop").disabled  = false;
     connectWS();
-    connectAudioWS();   // 마이크를 사용할 수 있을 때만 동작; 없으면 무시됨
+    connectAudioWS();
   } catch (err) {
     alert("카메라 접근 실패: " + err.message);
   }
@@ -647,7 +646,6 @@ function stopCamera() {
     };
     mediaRecorder.stop();
   } else {
-    // MediaRecorder가 없으면 (파일 업로드 모드) 모달만 열기
     openModal();
     return;
   }
@@ -658,9 +656,6 @@ function stopCamera() {
   document.getElementById("btn-start").disabled = false;
   document.getElementById("btn-stop").disabled  = true;
   setStatus("", "연결 대기중");
-
-  // 모달은 STT 수신 후 requestFeedback() 내부에서 열림
-  // (audioWs onmessage → stt_result 수신 → requestFeedback → openModal)
 }
 
 // ── 오디오 WS (실시간 마이크) ────────────────────────────────────────────
@@ -676,7 +671,7 @@ async function connectAudioWS() {
     return;
   }
 
-  audioWs = new WebSocket("ws://localhost:8000/ws/audio");
+  audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
 
   audioWs.onopen = () => {
     console.log("[Audio WS] 연결됨");
@@ -689,10 +684,9 @@ async function connectAudioWS() {
       }
     };
 
-    mediaRecorder.start(2500);  // 2.5초마다 청크 생성
+    mediaRecorder.start(2500);
   };
 
-  // ★ onmessage 핸들러는 단 하나만 선언합니다 (중복 선언 버그 수정)
   audioWs.onmessage = (e) => {
     const msg = JSON.parse(e.data);
 
@@ -702,22 +696,18 @@ async function connectAudioWS() {
     }
 
     if (msg.type === "stt_result") {
-      // ★ 응답 구조가 flat({ text, language, duration, ... })이므로 msg 직접 사용
       latestSttResult = {
         text:     msg.text     ?? "",
         language: msg.language ?? "ko",
         duration: msg.duration ?? 0,
       };
       console.log("[STT] 변환 완료:", latestSttResult.text);
-
-      // STT가 완료된 시점에 모달 열기 + 피드백 요청
       openModal();
       return;
     }
 
     if (msg.type === "error") {
       console.error("[STT] 오류:", msg.message);
-      // 오류여도 감정 데이터만으로 피드백 진행
       openModal();
       return;
     }
@@ -741,7 +731,6 @@ function closeModal() {
 
 // ── LLM 피드백 요청 ───────────────────────────────────────────────────────
 async function requestFeedback() {
-  // STT 결과가 아직 없으면 최대 30초 대기
   if (!latestSttResult) {
     const arrived = await waitForStt(30000);
     if (!arrived) {
