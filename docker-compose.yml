@@ -1,0 +1,56 @@
+services:
+
+  router:
+    build:
+      context: ./services/router
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - VIDEO_MODEL_URL=ws://video-analysis:8001/ws/analyze
+      - AUDIO_MODEL_URL=ws://audio-stt:8002/ws/stream
+      - LLM_SERVICE_URL=http://llm-feedback:8003/feedback
+    depends_on:
+      - video-analysis
+      - audio-stt
+      - llm-feedback
+
+  video-analysis:
+    build:
+      context: ./services/video-analysis
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  audio-stt:
+    build:
+      context: ./services/audio-stt
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  llm-feedback:
+    build:
+      context: ./services/llm-feedback
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
