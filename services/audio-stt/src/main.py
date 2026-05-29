@@ -5,65 +5,67 @@ import io
 import subprocess
 import tempfile
 import os
+import groq
 
-import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from faster_whisper import WhisperModel
+
+load_dotenv()  
 
 app = FastAPI(title="Audio STT Service")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-print("[STT] Whisper 모델 로딩 중...")
-model = WhisperModel("base", device="cpu", compute_type="int8")
-print("[STT] Whisper 모델 로드 완료!")
+groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+print("[STT] Groq 클라이언트 초기화 완료!")
 
 
 def transcribe(audio_bytes: bytes) -> dict:
-    """누적된 webm bytes → ffmpeg 변환 → Whisper 전사"""
-    
+    """누적된 webm bytes → ffmpeg으로 mp3 변환 → Groq Whisper 전사"""
+ 
     # 1. webm 임시 파일 저장
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
         f.write(audio_bytes)
         webm_path = f.name
-
+ 
+    mp3_path = webm_path.replace(".webm", ".mp3")
+ 
     try:
-        # 2. ffmpeg: webm → 16kHz mono PCM float32 raw
-        result = subprocess.run([
+        # 2. ffmpeg: webm → mp3 (Groq API 지원 포맷)
+        subprocess.run([
             "ffmpeg", "-y",
             "-i", webm_path,
-            "-ar", "16000",   # Whisper 요구 샘플레이트
-            "-ac", "1",       # mono
-            "-f", "f32le",    # float32 little-endian raw
-            "pipe:1"          # stdout으로 출력
+            "-ar", "16000",
+            "-ac", "1",
+            "-b:a", "64k",
+            mp3_path
         ], capture_output=True, check=True)
-
-        # 3. raw bytes → numpy float32 배열
-        audio_array = np.frombuffer(result.stdout, dtype=np.float32)
-
-        if len(audio_array) == 0:
-            return {"text": "", "language": "ko", "duration": 0.0}
-
-        # 4. Whisper 전사
-        segments, info = model.transcribe(
-            audio_array,
-            language="ko",
-            task="transcribe",
-            beam_size=5,
-            vad_filter=True,
-        )
-
-        text = " ".join(seg.text for seg in segments).strip()
+ 
+        # 3. Groq Whisper API 호출
+        with open(mp3_path, "rb") as audio_file:
+            t0 = time.perf_counter()
+            response = groq_client.audio.transcriptions.create(
+                model="whisper-large-v3-turbo",
+                file=audio_file,
+                language="ko",
+                response_format="verbose_json",
+            )
+            latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+ 
         return {
-            "text": text,
-            "language": info.language,
-            "duration": round(info.duration, 2),
+            "text": response.text.strip(),
+            "language": response.language if hasattr(response, "language") else "ko",
+            "duration": round(response.duration, 2) if hasattr(response, "duration") else 0.0,
+            "latency_ms": latency_ms,
         }
-
+ 
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"ffmpeg 변환 실패: {e.stderr.decode()}") from e
     finally:
-        os.unlink(webm_path)  # 임시 파일 정리
+        os.unlink(webm_path)
+        if os.path.exists(mp3_path):
+            os.unlink(mp3_path)
 
 
 @app.websocket("/ws/stream")
