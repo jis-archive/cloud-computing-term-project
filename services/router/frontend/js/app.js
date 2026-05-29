@@ -105,15 +105,24 @@ function stopCamera() {
                 audioWs.send(JSON.stringify({ type: "end_of_audio" }));
                 console.log("[Audio] end_of_audio 전송 — STT 대기 중...");
             }
+            
+            if (audioStream) {
+                audioStream.getTracks().forEach(t => t.stop());
+                audioStream = null;
+            }
         };
         mediaRecorder.stop();
     } else {
         openModal();
-        return;
     }
 
     if (ws) { ws.close(); ws = null; }
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (audioStream) {
+        audioStream.getTracks().forEach(t => t.stop());
+        audioStream = null;
+    }
+    
     document.getElementById("video").srcObject = null;
     document.getElementById("btn-start").disabled = false;
     document.getElementById("btn-stop").disabled = true;
@@ -123,9 +132,9 @@ function stopCamera() {
 // ── 오디오 WS (실시간 마이크) ────────────────────────────────────────────
 let audioWs = null;
 let mediaRecorder = null;
+let audioStream = null;
 
 async function connectAudioWS() {
-    let audioStream;
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
@@ -171,6 +180,7 @@ async function connectAudioWS() {
         if (msg.type === "error") {
             console.error("[STT] 오류:", msg.message);
             openModal();
+            if (audioWs) { audioWs.close(); audioWs = null; }
             return;
         }
     };
