@@ -59,7 +59,7 @@ def generate_feedback(stt: dict, emotion: dict) -> dict:
 """
 
     response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": FEEDBACK_SYSTEM_PROMPT},
             {"role": "user",   "content": user_message},
