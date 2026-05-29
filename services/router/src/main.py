@@ -3,6 +3,7 @@ import json
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import websockets
 import httpx
 
@@ -105,6 +106,7 @@ async def feedback_proxy(request: Request):
 def health_check():
     return {"status": "healthy"}
 
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

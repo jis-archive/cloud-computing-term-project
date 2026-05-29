@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>모의면접 감정 분석</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  /* ── 변수 ── */
+  :root {
+    --bg: #0a0c10;
+    --surface: #111520;
+    --border: #1e2535;
+    --accent-blue: #3b82f6;
+    --accent-cyan: #06b6d4;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --text-primary: #e2e8f0;
+    --text-muted: #64748b;
+    --confidence-color: #10b981;
+    --tension-color: #ef4444;
+    --stability-color: #3b82f6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(17,21,32,0.95);
+    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    color: var(--accent-cyan);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  #status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+  }
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background .3s;
+  }
+  #status-dot.connected { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 2s infinite; }
+  #status-dot.error     { background: var(--accent-red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── 메인 레이아웃 ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 24px;
+    gap: 20px;
+  }
+
+  /* ── 카메라 영역 ── */
+  .camera-section {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .camera-wrapper {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    aspect-ratio: 4/3;
+  }
+
+  #video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scaleX(-1); /* 미러 */
+  }
+
+  #canvas { display: none; }
+
+  .camera-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* 코너 프레임 */
+  .corner { position: absolute; width: 24px; height: 24px; border-color: var(--accent-cyan); border-style: solid; opacity: .6; }
+  .corner.tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+  .corner.tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+  .corner.bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+  .corner.br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+
+  /* 분석 중 표시 */
+  #analyzing-indicator {
+    position: absolute;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(6,182,212,.15);
+    border: 1px solid var(--accent-cyan);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 11px;
+    color: var(--accent-cyan);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  #analyzing-indicator.active { opacity: 1; }
+
+  /* 레이턴시 */
+  #latency-display {
+    position: absolute;
+    bottom: 12px; right: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ── 컨트롤 버튼 ── */
+  .controls {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+  .btn.primary { background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000; font-weight: 700; }
+  .btn.primary:hover { background: #22d3ee; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── 우측 패널 ── */
+  .panel {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── 카드 공통 ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .card-title {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* ── 대형 지표 ── */
+  .big-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .metric-item {}
+  .metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .metric-label {
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .metric-label .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  .metric-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    transition: color .3s;
+  }
+
+  .bar-track {
+    height: 8px;
+    background: rgba(255,255,255,.05);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .5s cubic-bezier(.4,0,.2,1);
+    width: 0%;
+  }
+
+  #confidence-value { color: var(--confidence-color); }
+  #confidence-fill  { background: linear-gradient(90deg, #059669, #10b981); }
+  .dot.confidence   { background: var(--confidence-color); }
+
+  #tension-value    { color: var(--tension-color); }
+  #tension-fill     { background: linear-gradient(90deg, #dc2626, #ef4444); }
+  .dot.tension      { background: var(--tension-color); }
+
+  #stability-value  { color: var(--stability-color); }
+  #stability-fill   { background: linear-gradient(90deg, #1d4ed8, #3b82f6); }
+  .dot.stability    { background: var(--stability-color); }
+
+  /* ── 감정 7개 raw ── */
+  .emotion-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .emotion-cell {
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .emotion-name {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .emotion-val {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    color: var(--text-primary);
+    transition: color .3s;
+  }
+
+  /* ── 페이스 피드백 ── */
+  #face-feedback {
+    text-align: center;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    transition: all .4s;
+  }
+  #face-feedback.good     { background: rgba(16,185,129,.1); border-color: #10b981; color: #10b981; }
+  #face-feedback.warn     { background: rgba(245,158,11,.1); border-color: #f59e0b; color: #f59e0b; }
+  #face-feedback.bad      { background: rgba(239,68,68,.1);  border-color: #ef4444; color: #ef4444; }
+
+  /* ── 히스토리 그래프 ── */
+  #history-canvas {
+    width: 100%;
+    height: 100px;
+    border-radius: 8px;
+    background: rgba(255,255,255,.02);
+  }
+
+  /* ── 빈 상태 ── */
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 20px 0;
+  }
+
+  /* ── interval 설정 ── */
+  .interval-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .interval-row label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .interval-row input[type=range] {
+    flex: 1;
+    accent-color: var(--accent-cyan);
+  }
+  .interval-row span { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--accent-cyan); min-width: 36px; }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+    .camera-section { grid-column: 1; grid-row: 1; }
+    .panel { grid-column: 1; grid-row: 2; }
+  }
+  /* ── 최종 피드백 모달 ── */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.75);
+    backdrop-filter: blur(6px);
+    z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+  }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    width: min(680px, 92vw);
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 32px;
+    display: flex; flex-direction: column; gap: 20px;
+    transform: translateY(20px);
+    transition: transform .3s;
+  }
+  .modal-backdrop.open .modal { transform: translateY(0); }
+
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px; letter-spacing: 2px;
+    color: var(--accent-cyan); text-transform: uppercase;
+  }
+  .modal-close {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 20px; cursor: pointer; line-height: 1;
+  }
+  .modal-close:hover { color: var(--text-primary); }
+
+  /* 종합 점수 */
+  .score-ring {
+    text-align: center; padding: 12px 0;
+  }
+  .score-number {
+    font-family: 'Space Mono', monospace;
+    font-size: 56px; font-weight: 700;
+    color: var(--accent-cyan);
+    line-height: 1;
+  }
+  .score-label {
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
+  }
+
+  /* 섹션 */
+  .fb-section { display: flex; flex-direction: column; gap: 10px; }
+  .fb-section-title {
+    font-size: 11px; font-family: 'Space Mono', monospace;
+    color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .fb-text {
+    font-size: 14px; line-height: 1.7; color: var(--text-primary);
+  }
+
+  /* 태그 리스트 */
+  .tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    padding: 6px 12px; border-radius: 20px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .tag.green { background: rgba(16,185,129,.1); border: 1px solid #10b981; color: #10b981; }
+  .tag.amber { background: rgba(245,158,11,.1);  border: 1px solid #f59e0b; color: #f59e0b; }
+  .tag.blue  { background: rgba(59,130,246,.1);  border: 1px solid #3b82f6; color: #3b82f6; }
+
+  /* 로딩 스피너 */
+  .spinner {
+    text-align: center; padding: 40px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .spinner::before {
+    content: "";
+    display: block; width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-cyan);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">InterviewAI · Emotion</div>
+  <div id="status-badge">
+    <div id="status-dot"></div>
+    <span id="status-text">연결 대기중</span>
+  </div>
+</header>
+
+<main>
+  <!-- 최종 피드백 모달 -->
+  <div class="modal-backdrop" id="feedback-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">최종 면접 피드백</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div id="modal-body">
+        <div class="spinner">피드백 생성 중...</div>
+      </div>
+    </div>
+  </div>
+  <!-- 카메라 -->
+  <section class="camera-section">
+    <div class="camera-wrapper">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+      <div class="camera-overlay">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div id="analyzing-indicator">ANALYZING</div>
+        <div id="latency-display">-- ms</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btn-start" onclick="startCamera()">📷 카메라 시작</button>
+      <button class="btn" id="btn-stop" onclick="stopCamera()" disabled>⏹ 중지</button>
+    </div>
+    <!-- 분석 간격 슬라이더 -->
+    <div class="card" style="padding:14px 20px">
+      <div class="interval-row">
+        <label>분석 간격</label>
+        <input type="range" id="interval-slider" min="1" max="5" step="0.5" value="2.5" oninput="updateInterval(this.value)" />
+        <span id="interval-label">2.5s</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 우측 패널 -->
+  <div class="panel">
+
+    <!-- 핵심 지표 -->
+    <div class="card">
+      <div class="card-title">핵심 지표</div>
+      <div class="big-metrics">
+        <div class="metric-item">
+          <div class="metric-header">
+            <div class="metric-label"><span class="dot confidence"></span>자신감</div>
+            <div class="metric-value" id="confidence-value">--</div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="confidence-fill"></div></div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-header">
+            <div class="metric-label"><span class="dot tension"></span>긴장도</div>
+            <div class="metric-value" id="tension-value">--</div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="tension-fill"></div></div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-header">
+            <div class="metric-label"><span class="dot stability"></span>안정도</div>
+            <div class="metric-value" id="stability-value">--</div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="stability-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 피드백 -->
+    <div id="face-feedback">카메라를 시작하면 분석을 시작합니다</div>
+
+    <!-- 7감정 Raw -->
+    <div class="card">
+      <div class="card-title">감정 세부 수치</div>
+      <div class="emotion-grid" id="emotion-grid">
+        <div class="empty-state" style="grid-column:1/3">분석 대기 중...</div>
+      </div>
+    </div>
+
+    <!-- 히스토리 그래프 -->
+    <div class="card">
+      <div class="card-title">추이 그래프</div>
+      <canvas id="history-canvas"></canvas>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ── 설정 ──────────────────────────────────────────────────────────────────
+const WS_URL  = "ws://localhost:8000/ws/video";
+const LLM_URL = "http://localhost:8000/feedback";
+const TRANSCRIBE_URL = "http://localhost:8000/transcribe";  // mp4 업로드용
+
+const EMOTION_LABELS = { angry:"분노", disgust:"혐오", fear:"두려움", happy:"행복", sad:"슬픔", surprise:"놀람", neutral:"중립" };
+const EMOTION_COLORS = { angry:"#ef4444", disgust:"#a855f7", fear:"#f59e0b", happy:"#10b981", sad:"#3b82f6", surprise:"#06b6d4", neutral:"#94a3b8" };
+
+let latestEmotionResult = null;
+let latestSttResult     = null;   // STT 변환 완료 후 채워짐
+
+let ws         = null;
+let stream     = null;
+let intervalId = null;
+let intervalSec = 2.5;
+let historyConf = [];
+let historyTens = [];
+const MAX_HISTORY = 30;
+
+// ── mp4 파일 업로드 → STT ─────────────────────────────────────────────────
+/**
+ * <input type="file" accept="video/mp4,audio/*" onchange="handleFileUpload(event)">
+ * 같은 파일 인풋과 연결해서 사용합니다.
+ */
+async function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  console.log(`[Upload] 파일 선택: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`);
+
+  // 로딩 표시
+  const statusEl = document.getElementById("upload-status");
+  if (statusEl) statusEl.textContent = "STT 변환 중...";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const resp = await fetch(TRANSCRIBE_URL, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    // 응답 구조: { text, language, duration, latency_ms, type }
+    const result = await resp.json();
+    console.log("[Upload] STT 완료:", result);
+
+    // latestSttResult 를 실시간 마이크와 동일한 구조로 저장
+    latestSttResult = {
+      text:     result.text     ?? "",
+      language: result.language ?? "ko",
+      duration: result.duration ?? 0,
+    };
+
+    if (statusEl) {
+      statusEl.textContent = `변환 완료 (${result.latency_ms} ms) — "${result.text.slice(0, 40)}..."`;
+    }
+
+    // 감정 데이터도 준비됐으면 즉시 피드백 요청
+    if (latestEmotionResult) {
+      openModal();
+    }
+
+  } catch (err) {
+    console.error("[Upload] STT 실패:", err);
+    if (statusEl) statusEl.textContent = `오류: ${err.message}`;
+  }
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen  = () => { setStatus("connected", "연결됨"); startLoop(); };
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.error) { console.error("서버 오류:", data.error); return; }
+    updateUI(data);
+  };
+  ws.onclose = () => { setStatus("", "연결 끊김"); stopLoop(); };
+  ws.onerror = () => setStatus("error", "연결 오류");
+}
+
+// ── 카메라 ────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 } });
+    document.getElementById("video").srcObject = stream;
+    document.getElementById("btn-start").disabled = true;
+    document.getElementById("btn-stop").disabled  = false;
+    connectWS();
+    connectAudioWS();   // 마이크를 사용할 수 있을 때만 동작; 없으면 무시됨
+  } catch (err) {
+    alert("카메라 접근 실패: " + err.message);
+  }
+}
+
+function stopCamera() {
+  stopLoop();
+
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.onstop = () => {
+      if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+        audioWs.send(JSON.stringify({ type: "end_of_audio" }));
+        console.log("[Audio] end_of_audio 전송 — STT 대기 중...");
+      }
+    };
+    mediaRecorder.stop();
+  } else {
+    // MediaRecorder가 없으면 (파일 업로드 모드) 모달만 열기
+    openModal();
+    return;
+  }
+
+  if (ws)     { ws.close(); ws = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById("video").srcObject = null;
+  document.getElementById("btn-start").disabled = false;
+  document.getElementById("btn-stop").disabled  = true;
+  setStatus("", "연결 대기중");
+
+  // 모달은 STT 수신 후 requestFeedback() 내부에서 열림
+  // (audioWs onmessage → stt_result 수신 → requestFeedback → openModal)
+}
+
+// ── 오디오 WS (실시간 마이크) ────────────────────────────────────────────
+let audioWs      = null;
+let mediaRecorder = null;
+
+async function connectAudioWS() {
+  let audioStream;
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.warn("[Audio] 마이크 접근 실패 — 파일 업로드 모드로 전환:", err.message);
+    return;
+  }
+
+  audioWs = new WebSocket("ws://localhost:8000/ws/audio");
+
+  audioWs.onopen = () => {
+    console.log("[Audio WS] 연결됨");
+
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
+        audioWs.send(e.data);
+      }
+    };
+
+    mediaRecorder.start(2500);  // 2.5초마다 청크 생성
+  };
+
+  // ★ onmessage 핸들러는 단 하나만 선언합니다 (중복 선언 버그 수정)
+  audioWs.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === "buffering") {
+      console.log(`[Audio] 버퍼링 중: ${msg.buffered_bytes} bytes`);
+      return;
+    }
+
+    if (msg.type === "stt_result") {
+      // ★ 응답 구조가 flat({ text, language, duration, ... })이므로 msg 직접 사용
+      latestSttResult = {
+        text:     msg.text     ?? "",
+        language: msg.language ?? "ko",
+        duration: msg.duration ?? 0,
+      };
+      console.log("[STT] 변환 완료:", latestSttResult.text);
+
+      // STT가 완료된 시점에 모달 열기 + 피드백 요청
+      openModal();
+      return;
+    }
+
+    if (msg.type === "error") {
+      console.error("[STT] 오류:", msg.message);
+      // 오류여도 감정 데이터만으로 피드백 진행
+      openModal();
+      return;
+    }
+  };
+
+  audioWs.onclose = () => console.log("[Audio WS] 연결 끊김");
+  audioWs.onerror = (e) => console.error("[Audio WS] 오류", e);
+}
+
+// ── 모달 열기/닫기 ────────────────────────────────────────────────────────
+function openModal() {
+  const modal = document.getElementById("feedback-modal");
+  document.getElementById("modal-body").innerHTML = '<div class="spinner">피드백 생성 중...</div>';
+  modal.classList.add("open");
+  requestFeedback();
+}
+
+function closeModal() {
+  document.getElementById("feedback-modal").classList.remove("open");
+}
+
+// ── LLM 피드백 요청 ───────────────────────────────────────────────────────
+async function requestFeedback() {
+  // STT 결과가 아직 없으면 최대 30초 대기
+  if (!latestSttResult) {
+    const arrived = await waitForStt(30000);
+    if (!arrived) {
+      console.warn("[Feedback] STT 타임아웃 — 감정 데이터만으로 피드백 진행");
+    }
+  }
+
+  const emotion = latestEmotionResult ?? { confidence: 0, tension: 0, stability: 0, raw: {} };
+  const stt     = latestSttResult     ?? { text: "", language: "ko", duration: 0 };
+
+  console.log("[Feedback] 요청 payload:", { stt_result: stt, emotion_result: emotion });
+
+  try {
+    const res = await fetch(LLM_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stt_result: stt, emotion_result: emotion }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderFeedback(data);
+
+  } catch (err) {
+    document.getElementById("modal-body").innerHTML = `
+      <div class="fb-text" style="color:var(--accent-red)">
+        ⚠️ 피드백 생성 실패: ${err.message}
+      </div>`;
+  }
+}
+
+function waitForStt(timeoutMs) {
+  return new Promise((resolve) => {
+    const interval = setInterval(() => {
+      if (latestSttResult) { clearInterval(interval); clearTimeout(timeout); resolve(true); }
+    }, 200);
+    const timeout = setTimeout(() => { clearInterval(interval); resolve(false); }, timeoutMs);
+  });
+}
+
+// ── 피드백 렌더링 ─────────────────────────────────────────────────────────
+function renderFeedback(data) {
+  const speech  = data.speech_feedback  ?? {};
+  const emotion = data.emotion_feedback ?? {};
+  const score   = data.overall_score    ?? "--";
+
+  const makeTagList = (arr = [], cls) =>
+    arr.map(t => `<span class="tag ${cls}">${t}</span>`).join("");
+
+  document.getElementById("modal-body").innerHTML = `
+    <div class="score-ring">
+      <div class="score-number">${score}<span style="font-size:24px;color:var(--text-muted)">/10</span></div>
+      <div class="score-label">종합 점수</div>
+    </div>
+
+    <div class="fb-section">
+      <div class="fb-section-title">종합 피드백</div>
+      <div class="fb-text">${data.overall_feedback ?? ""}</div>
+    </div>
+
+    <div class="fb-section">
+      <div class="fb-section-title">발화 분석</div>
+      <div class="fb-text" style="color:var(--text-muted);font-size:13px;margin-bottom:8px">
+        "${speech.summary ?? ""}"
+      </div>
+      <div class="tag-list">${makeTagList(speech.strengths, "green")}</div>
+    </div>
+
+    <div class="fb-section">
+      <div class="fb-section-title">개선할 점</div>
+      <div class="tag-list">${makeTagList(speech.improvements, "amber")}</div>
+    </div>
+
+    <div class="fb-section">
+      <div class="fb-section-title">추천 표현</div>
+      <div class="tag-list">${makeTagList(speech.better_expressions, "blue")}</div>
+    </div>
+
+    <div class="fb-section">
+      <div class="fb-section-title">감정 · 태도 분석</div>
+      <div class="fb-text">${emotion.assessment ?? ""}</div>
+      <div class="tag-list" style="margin-top:8px">${makeTagList(emotion.tips, "amber")}</div>
+    </div>
+  `;
+}
+
+// ── 캡처 & 전송 루프 ──────────────────────────────────────────────────────
+function startLoop() {
+  stopLoop();
+  intervalId = setInterval(captureAndSend, intervalSec * 1000);
+}
+
+function stopLoop() {
+  if (intervalId) { clearInterval(intervalId); intervalId = null; }
+}
+
+function captureAndSend() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const video  = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+  const b64 = canvas.toDataURL("image/jpeg", 0.7);
+
+  document.getElementById("analyzing-indicator").classList.add("active");
+  ws.send(JSON.stringify({ frame: b64 }));
+  setTimeout(() => document.getElementById("analyzing-indicator").classList.remove("active"), 400);
+}
+
+// ── UI 업데이트 ───────────────────────────────────────────────────────────
+function updateUI(data) {
+  document.getElementById("latency-display").textContent = `${data.latency_ms} ms`;
+  setMetric("confidence", data.confidence);
+  setMetric("tension",    data.tension);
+  setMetric("stability",  data.stability);
+  updateFeedback(data.confidence, data.tension);
+  updateEmotionGrid(data.raw);
+
+  historyConf.push(data.confidence);
+  historyTens.push(data.tension);
+  if (historyConf.length > MAX_HISTORY) { historyConf.shift(); historyTens.shift(); }
+  drawHistory();
+
+  latestEmotionResult = {
+    confidence: data.confidence,
+    tension:    data.tension,
+    stability:  data.stability,
+    raw:        data.raw,
+  };
+}
+
+function setMetric(name, value) {
+  const el   = document.getElementById(`${name}-value`);
+  const fill = document.getElementById(`${name}-fill`);
+  if (!el) return;
+  el.textContent  = value + "%";
+  fill.style.width = Math.min(value, 100) + "%";
+}
+
+function updateFeedback(conf, tens) {
+  const el = document.getElementById("face-feedback");
+  if (conf >= 60 && tens <= 30)   { el.textContent = "😊 좋은 표정입니다! 자신감이 느껴집니다."; el.className = "good"; }
+  else if (tens >= 60)            { el.textContent = "😰 긴장이 많이 감지됩니다. 심호흡 해보세요."; el.className = "bad"; }
+  else if (conf < 40)             { el.textContent = "🙂 조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
+  else                            { el.textContent = "👍 양호한 상태입니다."; el.className = "good"; }
+}
+
+function updateEmotionGrid(raw) {
+  if (!raw) return;
+  const grid  = document.getElementById("emotion-grid");
+  grid.innerHTML = "";
+  const order = ["happy","neutral","fear","sad","angry","surprise","disgust"];
+  order.forEach(key => {
+    const val  = raw[key] ?? 0;
+    const cell = document.createElement("div");
+    cell.className = "emotion-cell";
+    const color = EMOTION_COLORS[key] || "#94a3b8";
+    cell.innerHTML = `
+      <div class="emotion-name">${EMOTION_LABELS[key] || key}</div>
+      <div class="emotion-val" style="color:${val > 30 ? color : 'var(--text-primary)'}">${val}%</div>
+    `;
+    grid.appendChild(cell);
+  });
+}
+
+// ── 히스토리 캔버스 ───────────────────────────────────────────────────────
+function drawHistory() {
+  const canvas = document.getElementById("history-canvas");
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const drawLine = (data, color) => {
+    if (data.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = "round";
+    data.forEach((v, i) => {
+      const x = (i / (MAX_HISTORY - 1)) * W;
+      const y = H - (v / 100) * H;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.globalAlpha = .12;
+    ctx.fillStyle = color;
+    ctx.lineTo((data.length - 1) / (MAX_HISTORY - 1) * W, H);
+    ctx.lineTo(0, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  };
+
+  drawLine(historyConf, "#10b981");
+  drawLine(historyTens, "#ef4444");
+
+  ctx.font      = "10px 'Space Mono'";
+  ctx.fillStyle = "#10b981"; ctx.fillText("자신감", 8, 14);
+  ctx.fillStyle = "#ef4444"; ctx.fillText("긴장도", 8, 28);
+}
+
+// ── 유틸 ──────────────────────────────────────────────────────────────────
+function setStatus(cls, text) {
+  document.getElementById("status-dot").className  = cls;
+  document.getElementById("status-text").textContent = text;
+}
+
+function updateInterval(val) {
+  intervalSec = parseFloat(val);
+  document.getElementById("interval-label").textContent = val + "s";
+  if (intervalId) startLoop();
+}
+</script>
+</body>
+</html>
