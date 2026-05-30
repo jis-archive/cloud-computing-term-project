@@ -99,6 +99,7 @@ async function startCamera() {
 
 function stopCamera() {
     stopLoop();
+    stopMicVolumeAnalysis();
 
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.onstop = () => {
@@ -139,6 +140,7 @@ let audioStream = null;
 async function connectAudioWS() {
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startMicVolumeAnalysis(audioStream);
     } catch (err) {
         console.warn("[Audio] 마이크 접근 실패 — 파일 업로드 모드로 전환:", err.message);
         return;
@@ -189,6 +191,105 @@ async function connectAudioWS() {
 
     audioWs.onclose = () => console.log("[Audio WS] 연결 끊김");
     audioWs.onerror = (e) => console.error("[Audio WS] 오류", e);
+}
+
+let micAudioContext = null;
+let micAnalyser = null;
+let micSource = null;
+let micAnimationId = null;
+
+// ── 마이크 주파수 진폭 분석기 가동 ──────────────────────────────────────
+function startMicVolumeAnalysis(stream) {
+    stopMicVolumeAnalysis(); // 이전 잔류 세션 소멸 처리
+
+    if (!stream || stream.getAudioTracks().length === 0) {
+        console.warn("[MicMonitor] 유효한 마이크 오디오 트랙을 찾을 수 없습니다.");
+        return;
+    }
+
+    try {
+        micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        micAnalyser = micAudioContext.createAnalyser();
+        micAnalyser.fftSize = 64; // 계산 오버헤드 최소화 및 반응성 증폭을 위해 작게 유지
+        
+        micSource = micAudioContext.createMediaStreamSource(stream);
+        micSource.connect(micAnalyser);
+        
+        const bufferLength = micAnalyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        const outerCircle = document.getElementById("mic-outer");
+        const innerCircle = document.getElementById("mic-inner");
+        const textPreview = document.getElementById("mic-text-preview");
+        
+        if (textPreview) textPreview.textContent = "음성 입력 감지 중...";
+
+        function analyzeFrame() {
+            if (!micAnalyser) return;
+            micAnimationId = requestAnimationFrame(analyzeFrame);
+            
+            micAnalyser.getByteFrequencyData(dataArray);
+            
+            // 데시벨 볼륨 추출 계산
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength; // 0 ~ 255 범위 수치 계산
+            
+            // 0.0 ~ 1.0 사잇값으로 볼륨 인자 정규화 처리
+            const volumeFactor = Math.min(average / 90, 1.0);
+            
+            if (outerCircle && innerCircle) {
+                // [요청 조건] 음량이 클수록 내부 원 크기 확장 (1.0배에서 최대 2.3배까지 확장)
+                const scale = 1.0 + (volumeFactor * 1.3);
+                innerCircle.style.transform = `scale(${scale})`;
+                
+                // [요청 조건] 음량이 클수록 배경 색상이 점점 네온 그린으로 선명하게 밝아짐
+                outerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.08 + (volumeFactor * 0.45)})`;
+                outerCircle.style.borderColor = `rgba(16, 185, 129, ${0.2 + (volumeFactor * 0.62)})`;
+                innerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.25 + (volumeFactor * 0.65)})`;
+                
+                // 볼륨 피크 감지 시 강렬한 네온 글로우 효과 추가
+                if (volumeFactor > 0.15) {
+                    outerCircle.style.boxShadow = `0 0 ${volumeFactor * 25}px rgba(16, 185, 129, 0.6)`;
+                } else {
+                    outerCircle.style.boxShadow = "none";
+                }
+            }
+        }
+        analyzeFrame();
+    } catch (err) {
+        console.error("[MicMonitor] Web Audio API 실행 오류:", err);
+    }
+}
+
+// ── 마이크 분석 엔진 정지 및 리셋 ──────────────────────────────────────
+function stopMicVolumeAnalysis() {
+    if (micAnimationId) {
+        cancelAnimationFrame(micAnimationId);
+        micAnimationId = null;
+    }
+    if (micSource) { micSource.disconnect(); micSource = null; }
+    if (micAnalyser) { micAnalyser = null; }
+    if (micAudioContext) {
+        if (micAudioContext.state !== "closed") micAudioContext.close();
+        micAudioContext = null;
+    }
+    
+    // UI 컴포넌트 초기 원상 복구
+    const outerCircle = document.getElementById("mic-outer");
+    const innerCircle = document.getElementById("mic-inner");
+    const textPreview = document.getElementById("mic-text-preview");
+    
+    if (outerCircle && innerCircle) {
+        innerCircle.style.transform = "scale(1)";
+        outerCircle.style.backgroundColor = "rgba(16, 185, 129, 0.08)";
+        outerCircle.style.borderColor = "rgba(16, 185, 129, 0.2)";
+        innerCircle.style.backgroundColor = "rgba(16, 185, 129, 0.25)";
+        outerCircle.style.boxShadow = "none";
+    }
+    if (textPreview) textPreview.textContent = "마이크 입력 꺼짐";
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────

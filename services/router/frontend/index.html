@@ -120,9 +120,21 @@
     <div class="chat-wrapper">
       <section class="chat-section">
         <div class="card chat-card">
-          <div class="card-title">Interview Script</div>
+          <div class="card-title">Interview Chat Script</div>
+
           <div class="chat-log" id="chat-log">
-            <div class="chat-message system">면접 시작 버튼을 누르면 AI 면접관과의 대화가 개시됩니다.</div>
+            <div class="chat-message system">📷 면접 시작 버튼을 누르면 AI 면접관과의 대화가 개시됩니다.</div>
+          </div>
+
+          <div class="mic-feedback-bar">
+            <div class="mic-circle-outer" id="mic-outer">
+              <div class="mic-circle-inner" id="mic-inner"></div>
+              <svg class="mic-icon" viewBox="0 0 24 24">
+                <path fill="currentColor"
+                  d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 2.76-2.24 5-5.3 5s-5.3-2.24-5.3-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-1.7z" />
+              </svg>
+            </div>
+            <div class="mic-text-preview" id="mic-text-preview">마이크 입력 꺼짐</div>
           </div>
         </div>
       </section>
