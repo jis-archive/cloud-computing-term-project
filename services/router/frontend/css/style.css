@@ -690,6 +690,7 @@ main {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    padding-right: 6px;
     scroll-behavior: smooth;
 }
 
@@ -700,7 +701,7 @@ main {
     line-height: 1.6;
     max-width: 85%;
     word-break: break-all;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
