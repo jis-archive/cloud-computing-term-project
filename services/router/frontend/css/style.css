@@ -51,11 +51,9 @@ header {
 }
 
 .logo {
-    font-family: 'Space Mono', monospace;
     font-size: 14px;
     color: var(--accent-cyan);
     letter-spacing: 2px;
-    text-transform: uppercase;
 }
 
 #status-badge {
@@ -64,7 +62,6 @@ header {
     gap: 8px;
     font-size: 12px;
     color: var(--text-muted);
-    font-family: 'Space Mono', monospace;
 }
 
 #status-dot {
@@ -205,7 +202,6 @@ main {
     padding: 4px 14px;
     font-size: 11px;
     color: var(--accent-cyan);
-    font-family: 'Space Mono', monospace;
     letter-spacing: 1px;
     opacity: 0;
     transition: opacity .3s;
@@ -220,7 +216,6 @@ main {
     position: absolute;
     bottom: 24px;
     right: 26px;
-    font-family: 'Space Mono', monospace;
     font-size: 11px;
     color: var(--text-muted);
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
@@ -305,7 +300,6 @@ main {
 
 .card-title {
     font-size: 11px;
-    font-family: 'Space Mono', monospace;
     color: var(--text-muted);
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -341,7 +335,6 @@ main {
 }
 
 .metric-value {
-    font-family: 'Space Mono', monospace;
     font-size: 22px;
     font-weight: 700;
     transition: color .3s;
@@ -414,7 +407,6 @@ main {
 .emotion-name {
     font-size: 11px;
     color: var(--text-muted);
-    font-family: 'Space Mono', monospace;
     margin-bottom: 4px;
     text-transform: uppercase;
 }
@@ -422,7 +414,6 @@ main {
 .emotion-val {
     font-size: 18px;
     font-weight: 700;
-    font-family: 'Space Mono', monospace;
     color: var(--text-primary);
     transition: color .3s;
 }
@@ -493,7 +484,6 @@ main {
 }
 
 .interval-row span {
-    font-family: 'Space Mono', monospace;
     font-size: 12px;
     color: var(--accent-cyan);
     min-width: 36px;
@@ -544,8 +534,11 @@ main {
     justify-content: space-between;
 }
 
+#modal-body {
+    gap: 15px;
+}
+
 .modal-title {
-    font-family: 'Space Mono', monospace;
     font-size: 13px;
     letter-spacing: 2px;
     color: var(--accent-cyan);
@@ -572,7 +565,6 @@ main {
 }
 
 .score-number {
-    font-family: 'Space Mono', monospace;
     font-size: 56px;
     font-weight: 700;
     color: var(--accent-cyan);
@@ -594,7 +586,6 @@ main {
 
 .fb-section-title {
     font-size: 11px;
-    font-family: 'Space Mono', monospace;
     color: var(--text-muted);
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -644,7 +635,6 @@ main {
 .spinner {
     text-align: center;
     padding: 40px;
-    font-family: 'Space Mono', monospace;
     font-size: 13px;
     color: var(--text-muted);
 }
