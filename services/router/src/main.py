@@ -83,8 +83,6 @@ async def audio_router(client_ws: WebSocket):
                         print(f"[STT 결과] {parsed.get('text', '')}")
                         await client_ws.send_text(stt_result)
         
-        await client_ws.send_text(stt_result)
-
     except WebSocketDisconnect:
         print("[Router] 프론트엔드 음성 웹소켓 연결 끊김")
     except websockets.exceptions.ConnectionClosed:
