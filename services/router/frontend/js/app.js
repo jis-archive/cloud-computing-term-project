@@ -100,18 +100,23 @@ async function startCamera() {
 function stopCamera() {
     stopLoop();
     stopMicVolumeAnalysis();
-
+    
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.onstop = () => {
-            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+        mediaRecorder.onstop = async () => {
+            if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
+                const sentenceBlob = new Blob(sentenceChunks, { type: "audio/webm" });
+                sentenceChunks = [];
+                const arrayBuffer = await sentenceBlob.arrayBuffer();
+                audioWs.send(arrayBuffer);
                 audioWs.send(JSON.stringify({ type: "end_of_audio" }));
-                console.log("[Audio] end_of_audio 전송 — STT 대기 중...");
+                console.log("[Audio] 면접 종료 직전 마지막 잔여 버퍼 패킷 대피 완료");
             }
             
             if (audioStream) {
                 audioStream.getTracks().forEach(t => t.stop());
                 audioStream = null;
             }
+            openModal();
         };
         mediaRecorder.stop();
     } else {
@@ -120,15 +125,11 @@ function stopCamera() {
 
     if (ws) { ws.close(); ws = null; }
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    if (audioStream) {
-        audioStream.getTracks().forEach(t => t.stop());
-        audioStream = null;
-    }
+    if (audioWs) { audioWs.close(); audioWs = null; }
     
     document.getElementById("video").srcObject = null;
     document.getElementById("btn-start").style.display = "block";
     document.getElementById("btn-stop").style.display = "none";
-    
     setStatus("", "연결 대기중");
 }
 
@@ -137,60 +138,53 @@ let audioWs = null;
 let mediaRecorder = null;
 let audioStream = null;
 
+let sentenceChunks = [];
+let isSpeaking = false;
+let silenceStart = null;
+const SILENCE_THRESHOLD = 15;
+const SILENCE_DURATION = 800;
+
 async function connectAudioWS() {
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
         startMicVolumeAnalysis(audioStream);
-    } catch (err) {
-        console.warn("[Audio] 마이크 접근 실패 — 파일 업로드 모드로 전환:", err.message);
-        return;
-    }
-
-    audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
-
-    audioWs.onopen = () => {
-        console.log("[Audio WS] 연결됨");
-
-        mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
-
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
-                audioWs.send(e.data);
+        
+        audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
+        
+        audioWs.onopen = () => {
+            console.log("[Audio] 게이트웨이 음성 웹소켓 연결 성공");
+            
+            mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+            sentenceChunks = [];
+            
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    sentenceChunks.push(e.data);
+                }
+            };
+            
+            mediaRecorder.start(100);
+        };
+        
+        audioWs.onmessage = (event) => {
+            const text = event.data;
+            console.log("[Audio] 한 문장 STT 수신 완료:", text);
+            
+            if (text && text.trim().length > 0) {
+                const textPreview = document.getElementById("mic-text-preview");
+                if (textPreview) textPreview.textContent = text;
+                
+                appendChatLog("interviewee", text);
             }
         };
-
-        mediaRecorder.start(2500);
-    };
-
-    audioWs.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-
-        if (msg.type === "buffering") {
-            console.log(`[Audio] 버퍼링 중: ${msg.buffered_bytes} bytes`);
-            return;
-        }
-
-        if (msg.type === "stt_result") {
-            latestSttResult = {
-                text: msg.text ?? "",
-                language: msg.language ?? "ko",
-                duration: msg.duration ?? 0,
-            };
-            console.log("[STT] 변환 완료:", latestSttResult.text);
-            openModal();
-            return;
-        }
-
-        if (msg.type === "error") {
-            console.error("[STT] 오류:", msg.message);
-            openModal();
-            if (audioWs) { audioWs.close(); audioWs = null; }
-            return;
-        }
-    };
-
-    audioWs.onclose = () => console.log("[Audio WS] 연결 끊김");
-    audioWs.onerror = (e) => console.error("[Audio WS] 오류", e);
+        
+        audioWs.onerror = (err) => console.error("[Audio] 소켓 에러:", err);
+        audioWs.onclose = () => console.log("[Audio] 소켓 연결 종료");
+        
+    } catch (err) {
+        console.error("[Audio] 마이크 및 소켓 초기화 실패:", err);
+    }
 }
 
 let micAudioContext = null;
@@ -200,17 +194,12 @@ let micAnimationId = null;
 
 // ── 마이크 주파수 진폭 분석기 가동 ──────────────────────────────────────
 function startMicVolumeAnalysis(stream) {
-    stopMicVolumeAnalysis(); // 이전 잔류 세션 소멸 처리
-
-    if (!stream || stream.getAudioTracks().length === 0) {
-        console.warn("[MicMonitor] 유효한 마이크 오디오 트랙을 찾을 수 없습니다.");
-        return;
-    }
+    stopMicVolumeAnalysis(); // 잔류 커넥션 초기화
 
     try {
         micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
         micAnalyser = micAudioContext.createAnalyser();
-        micAnalyser.fftSize = 64; // 계산 오버헤드 최소화 및 반응성 증폭을 위해 작게 유지
+        micAnalyser.fftSize = 64;
         
         micSource = micAudioContext.createMediaStreamSource(stream);
         micSource.connect(micAnalyser);
@@ -230,38 +219,93 @@ function startMicVolumeAnalysis(stream) {
             
             micAnalyser.getByteFrequencyData(dataArray);
             
-            // 데시벨 볼륨 추출 계산
             let sum = 0;
             for (let i = 0; i < bufferLength; i++) {
                 sum += dataArray[i];
             }
-            const average = sum / bufferLength; // 0 ~ 255 범위 수치 계산
-            
-            // 0.0 ~ 1.0 사잇값으로 볼륨 인자 정규화 처리
+            const average = sum / bufferLength;
             const volumeFactor = Math.min(average / 90, 1.0);
             
             if (outerCircle && innerCircle) {
-                // [요청 조건] 음량이 클수록 내부 원 크기 확장 (1.0배에서 최대 2.3배까지 확장)
                 const scale = 1.0 + (volumeFactor * 1.3);
                 innerCircle.style.transform = `scale(${scale})`;
-                
-                // [요청 조건] 음량이 클수록 배경 색상이 점점 네온 그린으로 선명하게 밝아짐
                 outerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.08 + (volumeFactor * 0.45)})`;
                 outerCircle.style.borderColor = `rgba(16, 185, 129, ${0.2 + (volumeFactor * 0.62)})`;
                 innerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.25 + (volumeFactor * 0.65)})`;
-                
-                // 볼륨 피크 감지 시 강렬한 네온 글로우 효과 추가
-                if (volumeFactor > 0.15) {
-                    outerCircle.style.boxShadow = `0 0 ${volumeFactor * 25}px rgba(16, 185, 129, 0.6)`;
-                } else {
-                    outerCircle.style.boxShadow = "none";
-                }
+                if (volumeFactor > 0.15) outerCircle.style.boxShadow = `0 0 ${volumeFactor * 25}px rgba(16, 185, 129, 0.6)`;
+                else outerCircle.style.boxShadow = "none";
             }
+            
+            handleVoiceActivityDetection(average);
         }
         analyzeFrame();
     } catch (err) {
-        console.error("[MicMonitor] Web Audio API 실행 오류:", err);
+        console.error("[MicMonitor] Web Audio API 가동 에러:", err);
     }
+}
+
+function handleVoiceActivityDetection(averageVolume) {
+    if (!audioWs || audioWs.readyState !== WebSocket.OPEN || !mediaRecorder || mediaRecorder.state === "inactive") {
+        return;
+    }
+
+    if (averageVolume > SILENCE_THRESHOLD) {
+        isSpeaking = true;
+        silenceStart = null;
+        
+        const textPreview = document.getElementById("mic-text-preview");
+        if (textPreview && textPreview.textContent === "음성 입력 감지 중...") {
+            textPreview.textContent = "말씀하시는 중...";
+        }
+    } else {
+        if (isSpeaking) {
+            if (silenceStart === null) {
+                silenceStart = Date.now(); // 침묵이 시작된 시점 래치 가동
+            } else if (Date.now() - silenceStart >= SILENCE_DURATION) {
+                console.log(`[VAD] 문장 마침 감지 (${SILENCE_DURATION}ms 무음 유지). 오디오 포워딩을 시작합니다.`);
+                sendCurrentSentence();
+                
+                isSpeaking = false;
+                silenceStart = null;
+            }
+        }
+    }
+}
+
+async function sendCurrentSentence() {
+    if (sentenceChunks.length === 0) return;
+    
+    const sentenceBlob = new Blob(sentenceChunks, { type: "audio/webm" });
+    
+    sentenceChunks = [];
+    
+    try {
+        const arrayBuffer = await sentenceBlob.arrayBuffer();
+        if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+            audioWs.send(arrayBuffer);
+            
+            audioWs.send(JSON.stringify({ type: "end_of_audio" }));
+            console.log("[VAD] 문장 바이너리 및 end_of_audio 지시 패킷 유기적 송신 완료");
+            
+            const textPreview = document.getElementById("mic-text-preview");
+            if (textPreview) textPreview.textContent = "AI 문장 분석 중...";
+        }
+    } catch (err) {
+        console.error("[VAD] 문장 슬라이스 패킷 전송 실패:", err);
+    }
+}
+
+function appendChatLog(sender, text) {
+    const chatLog = document.getElementById("chat-log");
+    if (!chatLog) return;
+    
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `chat-message ${sender}`; // interviewee 또는 interviewer 적용
+    messageDiv.textContent = text;
+    
+    chatLog.appendChild(messageDiv);
+    
+    chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 // ── 마이크 분석 엔진 정지 및 리셋 ──────────────────────────────────────
