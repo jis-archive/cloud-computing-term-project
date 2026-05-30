@@ -18,7 +18,7 @@ groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
 print("[STT] Groq 클라이언트 초기화 완료!")
 
 
-def transcribe(audio_bytes: bytes) -> dict:
+async def transcribe(audio_bytes: bytes) -> dict:
     """누적된 webm bytes → ffmpeg으로 mp3 변환 → Groq Whisper 전사"""
  
     # 1. webm 임시 파일 저장
@@ -30,14 +30,13 @@ def transcribe(audio_bytes: bytes) -> dict:
  
     try:
         # 2. ffmpeg: webm → mp3 (Groq API 지원 포맷)
-        subprocess.run([
-            "ffmpeg", "-y",
-            "-i", webm_path,
-            "-ar", "16000",
-            "-ac", "1",
-            "-b:a", "64k",
-            mp3_path
-        ], capture_output=True, check=True)
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-i", webm_path,
+            "-ar", "16000", "-ac", "1", "-b:a", "64k", mp3_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await proc.communicate()
  
         # 3. Groq Whisper API 호출
         with open(mp3_path, "rb") as audio_file:
