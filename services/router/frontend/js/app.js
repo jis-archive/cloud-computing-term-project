@@ -611,6 +611,6 @@ function setStatus(cls, text) {
 
 function updateInterval(val) {
     intervalSec = parseFloat(val);
-    document.getElementById("interval-label").textContent = val + "s";
+    document.getElementById("interval-label").textContent = intervalSec.toFixed(1) + "s";
     if (intervalId) startLoop();
 }
