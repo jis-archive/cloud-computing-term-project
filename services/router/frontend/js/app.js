@@ -250,8 +250,6 @@ function startMicVolumeAnalysis(stream) {
         if (textPreview) textPreview.textContent = "음성 입력 감지 중...";
 
         function analyzeFrame() {
-            console.log("Current Average Volume:", average);
-            
             if (!micAnalyser) return;
             micAnimationId = requestAnimationFrame(analyzeFrame);
             
@@ -261,8 +259,11 @@ function startMicVolumeAnalysis(stream) {
             for (let i = 0; i < bufferLength; i++) {
                 sum += dataArray[i];
             }
+
             const average = sum / bufferLength;
             const volumeFactor = Math.min(average / 90, 1.0);
+
+            console.log("Current Average Volume:", average);
             
             if (outerCircle && innerCircle) {
                 const scale = 1.0 + (volumeFactor * 1.3);
