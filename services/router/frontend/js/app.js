@@ -143,8 +143,6 @@ const SILENCE_THRESHOLD = 30;
 const SILENCE_DURATION = 800;  
 let isAudioRecording = false;
 
-let isAudioRecording = false;
-
 async function connectAudioWS() {
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
