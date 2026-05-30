@@ -250,6 +250,8 @@ function startMicVolumeAnalysis(stream) {
         if (textPreview) textPreview.textContent = "음성 입력 감지 중...";
 
         function analyzeFrame() {
+            console.log("Current Average Volume:", average);
+            
             if (!micAnalyser) return;
             micAnimationId = requestAnimationFrame(analyzeFrame);
             
