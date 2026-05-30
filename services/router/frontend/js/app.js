@@ -139,7 +139,7 @@ let isSpeaking = false;
 let silenceStart = null;       
 let entireInterviewTranscript = "";
 
-const SILENCE_THRESHOLD = 90;
+const SILENCE_THRESHOLD = 100;
 const SILENCE_DURATION = 1000;
 let isAudioRecording = false;
 
