@@ -134,11 +134,14 @@ let audioWs = null;
 let mediaRecorder = null;
 let audioStream = null;
 
-let sentenceChunks = [];
-let isSpeaking = false;
-let silenceStart = null;
-const SILENCE_THRESHOLD = 25;
-const SILENCE_DURATION = 1000;
+let sentenceChunks = [];       
+let isSpeaking = false;        
+let silenceStart = null;       
+let entireInterviewTranscript = "";
+
+const SILENCE_THRESHOLD = 30;  
+const SILENCE_DURATION = 800;  
+let isAudioRecording = false;
 
 let isAudioRecording = false;
 
@@ -152,18 +155,41 @@ async function connectAudioWS() {
         audioWs.onopen = () => {
             console.log("[Audio] 게이트웨이 음성 웹소켓 연결 성공");
             sentenceChunks = [];
-            isAudioRecording = true;
-            
+            isAudioRecording = true; 
             startNewSentenceRecorder();
         };
         
         audioWs.onmessage = (event) => {
-            const text = event.data;
-            if (text && text.trim().length > 0) {
+            const rawMessage = event.data;
+            console.log("[Audio] 백엔드 패킷 수신:", rawMessage);
+            
+            try {
+                const dataObj = JSON.parse(rawMessage);
+                
+                if (dataObj.type === "stt_result" && dataObj.text) {
+                    const extractedText = dataObj.text.trim();
+                    
+                    if (extractedText.length > 0) {
+                        appendChatLog("interviewee", extractedText);
+                        
+                        entireInterviewTranscript += extractedText + " ";
+                    }
+                }
+                
                 const textPreview = document.getElementById("mic-text-preview");
-                if (textPreview) textPreview.textContent = text;
-                appendChatLog("interviewee", text);
-                entireInterviewTranscript += text.trim() + " ";
+                if (textPreview) {
+                    if (dataObj.type === "buffering") {
+                        textPreview.textContent = "음성 신호 압축 처리 중...";
+                    } else if (dataObj.type === "stt_result") {
+                        textPreview.textContent = "음성 입력 감지 중...";
+                    }
+                }
+                
+            } catch (jsonErr) {
+                if (rawMessage && typeof rawMessage === "string" && !rawMessage.startsWith("{")) {
+                    appendChatLog("interviewee", rawMessage.trim());
+                    entireInterviewTranscript += rawMessage.trim() + " ";
+                }
             }
         };
         
@@ -263,25 +289,30 @@ function handleVoiceActivityDetection(averageVolume) {
 
     if (averageVolume > SILENCE_THRESHOLD) {
         isSpeaking = true;
-        silenceStart = null;
+        silenceStart = null; 
         
         const textPreview = document.getElementById("mic-text-preview");
-        if (textPreview && textPreview.textContent === "음성 입력 감지 중...") {
+        if (textPreview) {
             textPreview.textContent = "말씀하시는 중...";
         }
     } else {
         if (isSpeaking) {
             if (silenceStart === null) {
-                silenceStart = Date.now();
+                silenceStart = Date.now(); 
             } else if (Date.now() - silenceStart >= SILENCE_DURATION) {
                 console.log(`[VAD] 문장 마침 감지 (${SILENCE_DURATION}ms 무음). 레코더 리사이클 트리거.`);
                 
                 if (mediaRecorder && mediaRecorder.state === "recording") {
-                    mediaRecorder.stop();
+                    mediaRecorder.stop(); 
                 }
                 
                 isSpeaking = false;
                 silenceStart = null;
+                
+                const textPreview = document.getElementById("mic-text-preview");
+                if (textPreview) {
+                    textPreview.textContent = "AI 문장 분석 중...";
+                }
             }
         }
     }

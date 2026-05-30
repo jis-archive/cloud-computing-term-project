@@ -686,11 +686,11 @@ main {
 
 .chat-log {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto; 
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding-right: 6px;
+    scroll-behavior: smooth;
 }
 
 .chat-message {
@@ -700,6 +700,8 @@ main {
     line-height: 1.6;
     max-width: 85%;
     word-break: break-all;
+    margin-bottom: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .chat-message.system {
@@ -734,7 +736,7 @@ main {
     background: rgba(0, 0, 0, 0.2);
     border-top: 1px solid var(--border);
     border-radius: 0 0 12px 12px;
-    margin-top: auto; /* 대화 전용 카드의 최하단 정위치 고정 */
+    margin-top: auto;
     flex-shrink: 0;
 }
 
