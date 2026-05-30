@@ -87,8 +87,9 @@ async function startCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         document.getElementById("video").srcObject = stream;
-        document.getElementById("btn-start").disabled = true;
-        document.getElementById("btn-stop").disabled = false;
+        document.getElementById("btn-start").style.display = "none";
+        document.getElementById("btn-stop").style.display = "block";
+        
         connectWS();
         connectAudioWS();
     } catch (err) {
@@ -124,8 +125,9 @@ function stopCamera() {
     }
     
     document.getElementById("video").srcObject = null;
-    document.getElementById("btn-start").disabled = false;
-    document.getElementById("btn-stop").disabled = true;
+    document.getElementById("btn-start").style.display = "block";
+    document.getElementById("btn-stop").style.display = "none";
+    
     setStatus("", "연결 대기중");
 }
 

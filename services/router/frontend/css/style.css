@@ -25,9 +25,15 @@ body {
     background: var(--bg);
     color: var(--text-primary);
     font-family: 'Noto Sans KR', sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    overflow-x: hidden;
 }
 
 /* ── 헤더 ── */
@@ -93,24 +99,32 @@ header {
 
 /* ── 메인 레이아웃 ── */
 main {
-    flex: 1;
+    flex: 0 1 auto;
     display: grid;
-    grid-template-columns: 380px 1fr;
-    grid-template-rows: auto 1fr;
-    max-width: 1400px;
-    margin: 0 auto;
+    grid-template-columns: 1fr 2fr 2fr;
+    /* 1:2:2 가로 비율 고정 */
+    max-width: 1600px;
     width: 100%;
     padding: 24px;
     gap: 20px;
+    margin: auto;
+    align-items: stretch;
+}
+
+.panel-wrapper,
+.chat-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
 }
 
 /* ── 카메라 영역 ── */
 .camera-section {
-    grid-column: 2;
-    grid-row: 1 / 3;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    height: max-content;
 }
 
 .camera-wrapper {
@@ -155,24 +169,28 @@ main {
     top: 12px;
     left: 12px;
     border-width: 2px 0 0 2px;
+    border-top-left-radius: 6px;
 }
 
 .corner.tr {
     top: 12px;
     right: 12px;
     border-width: 2px 2px 0 0;
+    border-top-right-radius: 6px;
 }
 
 .corner.bl {
     bottom: 12px;
     left: 12px;
     border-width: 0 0 2px 2px;
+    border-bottom-left-radius: 6px;
 }
 
 .corner.br {
     bottom: 12px;
     right: 12px;
     border-width: 0 2px 2px 0;
+    border-bottom-right-radius: 6px;
 }
 
 /* 분석 중 표시 */
@@ -200,63 +218,81 @@ main {
 /* 레이턴시 */
 #latency-display {
     position: absolute;
-    bottom: 12px;
-    right: 12px;
+    bottom: 24px;
+    right: 26px;
     font-family: 'Space Mono', monospace;
     font-size: 11px;
     color: var(--text-muted);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
-/* ── 컨트롤 버튼 ── */
-.controls {
-    display: flex;
-    gap: 12px;
-}
-
-.btn {
-    flex: 1;
-    padding: 12px 20px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-primary);
-    font-family: 'Noto Sans KR', sans-serif;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all .2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn:hover {
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
-}
-
-.btn.primary {
-    background: var(--accent-cyan);
-    border-color: var(--accent-cyan);
-    color: #000;
+#btn-start {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    padding: 16px 36px;
+    font-size: 15px;
     font-weight: 700;
+    background: var(--accent-cyan);
+    border: none;
+    border-radius: 30px;
+    color: #000;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: block;
+    /* 초기 상태 표시 */
 }
 
-.btn.primary:hover {
+#btn-start:hover {
     background: #22d3ee;
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 0 30px rgba(6, 182, 212, 0.7);
 }
 
-.btn:disabled {
-    opacity: .4;
-    cursor: not-allowed;
+/* ── 면접 중지 버튼 (카메라 하단 가운데 배치) ── */
+#btn-stop {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    padding: 10px 24px;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--accent-red);
+    border-radius: 20px;
+    color: var(--accent-red);
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: none;
+    /* 초기 상태 미표시 */
 }
 
-/* ── 우측 패널 ── */
+#btn-stop:hover {
+    background: var(--accent-red);
+    color: #000;
+    transform: translateX(-50%) scale(1.05);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+/* ── 패널 ── */
 .panel {
-    grid-column: 1;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    padding-right: 6px;
 }
 
 /* ── 카드 공통 ── */
@@ -463,23 +499,6 @@ main {
     min-width: 36px;
 }
 
-@media (max-width: 900px) {
-    main {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto;
-    }
-
-    .camera-section {
-        grid-column: 1;
-        grid-row: 1;
-    }
-
-    .panel {
-        grid-column: 1;
-        grid-row: 2;
-    }
-}
-
 /* ── 최종 피드백 모달 ── */
 .modal-backdrop {
     position: fixed;
@@ -645,5 +664,111 @@ main {
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+.chat-section {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.chat-log {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 6px;
+}
+
+.chat-message {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 85%;
+    word-break: break-all;
+}
+
+.chat-message.system {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    align-self: center;
+    text-align: center;
+}
+
+.chat-message.interviewer {
+    background: rgba(6, 182, 212, 0.08);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    color: var(--text-primary);
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+}
+
+.chat-message.interviewee {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: var(--text-primary);
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+}
+
+.panel::-webkit-scrollbar,
+.chat-log::-webkit-scrollbar {
+    width: 4px;
+}
+
+.panel::-webkit-scrollbar-thumb,
+.chat-log::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+@media (max-width: 960px) {
+    body {
+        justify-content: flex-start;
+    }
+
+    main {
+        grid-template-columns: 1fr;
+        margin: 0 auto;
+    }
+
+    .camera-section {
+        order: 1;
+    }
+
+    .chat-wrapper {
+        order: 2;
+        height: 400px;
+    }
+
+    .chat-section {
+        position: relative;
+        height: 100%;
+    }
+
+    .panel-wrapper {
+        order: 3;
+        height: auto;
+    }
+
+    .panel {
+        position: relative;
+        height: auto;
+        overflow-y: visible;
     }
 }
