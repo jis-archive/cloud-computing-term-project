@@ -534,10 +534,6 @@ main {
     justify-content: space-between;
 }
 
-#modal-body {
-    gap: 15px;
-}
-
 .modal-title {
     font-size: 13px;
     letter-spacing: 2px;
@@ -581,6 +577,7 @@ main {
 .fb-section {
     display: flex;
     flex-direction: column;
+    margin-top: 30px;
     gap: 10px;
 }
 

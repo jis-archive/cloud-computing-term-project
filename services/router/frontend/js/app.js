@@ -538,8 +538,8 @@ function setMetric(name, value) {
 
 function updateFeedback(conf, tens) {
     const el = document.getElementById("face-feedback");
-    if (conf >= 60 && tens <= 30) { el.textContent = "😊 좋은 표정입니다! 자신감이 느껴집니다."; el.className = "good"; }
-    else if (tens >= 60) { el.textContent = "😰 긴장이 많이 감지됩니다. 심호흡 해보세요."; el.className = "bad"; }
+    if (conf >= 60 && tens <= 30) { el.textContent = "😊 좋은 표정입니다!<br>자신감이 느껴집니다."; el.className = "good"; }
+    else if (tens >= 60) { el.textContent = "😰 긴장이 많이 감지됩니다.<br>심호흡 해보세요."; el.className = "bad"; }
     else if (conf < 40) { el.textContent = "🙂 조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
     else { el.textContent = "👍 양호한 상태입니다."; el.className = "good"; }
 }
