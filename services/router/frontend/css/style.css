@@ -774,14 +774,24 @@ main {
 }
 
 .panel::-webkit-scrollbar,
-.chat-log::-webkit-scrollbar {
+.chat-log::-webkit-scrollbar,
+#modal-body::-webkit-scrollbar {
     width: 4px;
+    height: 4px;
+}
+
+.panel::-webkit-scrollbar-track,
+.chat-log::-webkit-scrollbar-track,
+#modal-body::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .panel::-webkit-scrollbar-thumb,
-.chat-log::-webkit-scrollbar-thumb {
+.chat-log::-webkit-scrollbar-thumb,
+#modal-body::-webkit-scrollbar-thumb {
     background: var(--border);
     border-radius: 2px;
+    transition: background-color 0.2s ease;
 }
 
 @media (max-width: 960px) {
