@@ -510,7 +510,7 @@ main {
 .modal {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 20px;
+    border-radius: 20px 0 0 20px;
     width: min(680px, 92vw);
     max-height: 85vh;
     overflow-y: auto;
