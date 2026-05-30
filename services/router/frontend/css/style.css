@@ -300,7 +300,7 @@ main {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 20px;
+    padding: 16px;
 }
 
 .card-title {
@@ -689,8 +689,8 @@ main {
     overflow-y: auto; 
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding-right: 6px;
+    gap: 20px;
+    padding: 15px;
     scroll-behavior: smooth;
 }
 
@@ -701,7 +701,6 @@ main {
     line-height: 1.6;
     max-width: 85%;
     word-break: break-all;
-    margin-bottom: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
@@ -732,8 +731,8 @@ main {
 .mic-feedback-bar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px;
+    gap: 10px;
+    padding: 10px;
     background: rgba(0, 0, 0, 0.2);
     border-top: 1px solid var(--border);
     border-radius: 0 0 12px 12px;
