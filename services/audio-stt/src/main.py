@@ -97,7 +97,7 @@ async def stt_ws(websocket: WebSocket):
 
                     t0 = time.perf_counter()
                     loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, transcribe, bytes(audio_buffer))
+                    result = await transcribe(bytes(audio_buffer))
                     result["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
                     result["type"] = "stt_result"
 
