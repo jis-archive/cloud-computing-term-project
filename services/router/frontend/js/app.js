@@ -139,7 +139,7 @@ let isSpeaking = false;
 let silenceStart = null;       
 let entireInterviewTranscript = "";
 
-const SILENCE_THRESHOLD = 127;
+const SILENCE_THRESHOLD = 70;
 const SILENCE_DURATION = 1000;
 let isAudioRecording = false;
 
@@ -263,7 +263,7 @@ function startMicVolumeAnalysis(stream) {
             const average = sum / bufferLength;
             const volumeFactor = Math.min(average / 90, 1.0);
 
-            console.log("Current Average Volume:", average);
+            // console.log("Current Average Volume:", average);
             
             if (outerCircle && innerCircle) {
                 const scale = 1.0 + (volumeFactor * 1.3);
