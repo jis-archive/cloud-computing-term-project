@@ -1,14 +1,11 @@
 import json
 import os
-from dotenv import load_dotenv
 import time
 
 import groq
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-load_dotenv()  
 
 app = FastAPI(title="LLM Feedback Service")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
