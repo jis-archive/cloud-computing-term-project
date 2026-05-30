@@ -302,7 +302,6 @@ main {
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 2px;
-    text-transform: uppercase;
     margin-bottom: 16px;
 }
 
@@ -408,7 +407,6 @@ main {
     font-size: 11px;
     color: var(--text-muted);
     margin-bottom: 4px;
-    text-transform: uppercase;
 }
 
 .emotion-val {
@@ -538,7 +536,6 @@ main {
     font-size: 13px;
     letter-spacing: 2px;
     color: var(--accent-cyan);
-    text-transform: uppercase;
 }
 
 .modal-close {
@@ -585,7 +582,6 @@ main {
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 2px;
-    text-transform: uppercase;
     border-bottom: 1px solid var(--border);
     padding-bottom: 8px;
 }

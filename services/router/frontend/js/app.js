@@ -230,7 +230,7 @@ let micAnimationId = null;
 
 // ── 마이크 주파수 진폭 분석기 가동 ──────────────────────────────────────
 function startMicVolumeAnalysis(stream) {
-    stopMicVolumeAnalysis(); // 잔류 커넥션 초기화
+    stopMicVolumeAnalysis();
 
     try {
         micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -294,7 +294,7 @@ function handleVoiceActivityDetection(averageVolume) {
         
         const textPreview = document.getElementById("mic-text-preview");
         if (textPreview) {
-            textPreview.textContent = "말씀하시는 중...";
+            textPreview.textContent = "말하는 중...";
         }
     } else {
         if (isSpeaking) {
@@ -421,7 +421,7 @@ async function requestFeedback() {
     } catch (err) {
         document.getElementById("modal-body").innerHTML = `
       <div class="fb-text" style="color:var(--accent-red)">
-        ⚠️ 피드백 생성 실패: ${err.message}
+        피드백 생성 실패: ${err.message}
       </div>`;
     }
 }
@@ -538,10 +538,10 @@ function setMetric(name, value) {
 
 function updateFeedback(conf, tens) {
     const el = document.getElementById("face-feedback");
-    if (conf >= 60 && tens <= 30) { el.innerText = "😊 좋은 표정입니다!\n자신감이 느껴집니다."; el.className = "good"; }
-    else if (tens >= 60) { el.innerText = "😰 긴장이 많이 감지됩니다.\n심호흡 해보세요."; el.className = "bad"; }
-    else if (conf < 40) { el.innerText = "🙂 조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
-    else { el.innerText = "👍 양호한 상태입니다."; el.className = "good"; }
+    if (conf >= 60 && tens <= 30) { el.innerText = "좋은 표정입니다!\n자신감이 느껴집니다."; el.className = "good"; }
+    else if (tens >= 60) { el.innerText = "긴장이 많이 감지됩니다.\n심호흡 해보세요."; el.className = "bad"; }
+    else if (conf < 40) { el.innerText = "조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
+    else { el.innerText = "양호한 상태입니다."; el.className = "good"; }
 }
 
 function updateEmotionGrid(raw) {
