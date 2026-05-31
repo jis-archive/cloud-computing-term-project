@@ -440,9 +440,27 @@ async function sendCurrentSentence() {
     }
 }
 
+function stripMarkdown(text) {
+    if (!text) return "";
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '$1')   // **볼드** -> 볼드
+        // .replace(/__(.*?)__/g, '$1')       // __볼드__ -> 볼드
+        // .replace(/\*(.*?)\*/g, '$1')       // *이탤릭* -> 이탤릭
+        // .replace(/_(.*?)_/g, '$1')         // _이탤릭* -> 이탤릭
+        // .replace(/`(.*?)`/g, '$1')         // `코드` -> 코드
+        // .replace(/[-*+]\s+/g, '')          // 불필요한 리스트 불릿 기호 제거 (- , * , + )
+        // .replace(/#{1,6}\s+/g, '')         // 샵(#) 헤더 표시 제거
+        // .replace(/\*\*/g, '')              // 혹시 낱개로 깨져서 남은 볼드 기호 청소
+        // .replace(/\*/g, '');               // 혹시 낱개로 깨져서 남은 이탤릭 기호 청소
+}
+
 function appendChatLog(sender, text) {
     const chatLog = document.getElementById("chat-log");
     if (!chatLog) return;
+
+    if (sender === "interviewer") {
+        text = stripMarkdown(text);
+    }
     
     const messageDiv = document.createElement("div");
     messageDiv.className = `chat-message ${sender}`; // interviewee 또는 interviewer 적용
@@ -484,7 +502,7 @@ function stopMicVolumeAnalysis() {
 let silenceTimeoutId = null;
 let timerAnimationFrameId = null;
 let silenceStartTime = null;
-const SILENCE_LIMIT_MS = 10000;
+const SILENCE_LIMIT_MS = 5000;
 
 function startSilenceTimer() {
     resetSilenceTimer();
@@ -561,16 +579,29 @@ async function requestNextTurn() {
         if (!response.ok) throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
         const data = await response.json();
 
-        appendChatLog("interviewer", data.message);
+        let aiMessage = data.message;
         
-        interviewSessionHistory.push({ role: "interviewer", text: data.message });
+        const isInterviewFinished = aiMessage.includes("[면접 종료]");
         
+        if (isInterviewFinished) {
+            aiMessage = aiMessage.replace("[면접 종료]", "").trim();
+        }
+
+        appendChatLog("interviewer", aiMessage);
+        interviewSessionHistory.push({ role: "interviewer", text: aiMessage });
         currentTurnAnswer = "";
+        
+        if (isInterviewFinished) {
+            appendChatLog("system", "AI 면접관이 질문을 모두 마쳤습니다.");
+            stopCamera();
+            return; 
+        }
+        
     } catch (err) {
         console.error("[Turn Interaction Error] 면접관 소통 장애:", err);
         const loadingEl = document.getElementById("ai-loading");
         if (loadingEl) loadingEl.remove();
-        appendChatLog("interviewer", "죄송합니다 지원자님, 오디오 스트림 수신 문제로 답변을 잠시 놓쳤습니다. 다음 말씀 이어가 주시겠어요?");
+        appendChatLog("interviewer", "죄송합니다 지원자님, 답변 컨텍스트 수신 중 일시적인 지연이 발생했습니다. 말씀을 이어서 해주세요.");
     }
 }
 
