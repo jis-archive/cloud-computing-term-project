@@ -14,6 +14,7 @@ groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
 print("[LLM] Groq 클라이언트 초기화 완료!")
 
 
+# ── 데이터 수신 스키마 사양 ───────────────────────────────────────
 class FeedbackRequest(BaseModel):
     stt_result: dict = {}
     emotion_result: dict = {}
@@ -30,6 +31,9 @@ FEEDBACK_SYSTEM_PROMPT = """
 
 전체 대화 배열(history) 내의 면접관 질문 의도를 지원자가 얼마나 정확히 파악했는지, 답변 구조의 논리성이 우수했는지 다각도로 검토하고,
 동시에 전달된 전체 시간대 감정 통계 수치(confidence, tension, stability)의 흐름과 평균값을 바탕으로 압박 상황에서의 태도 제어 능력을 과학적으로 채점하세요.
+
+★ 중요 - 음성 인식 오류(STT 오타) 심사 관대성 규칙 (필수 준수):
+실시간 음성 인식(STT) 인프라의 한계로 인해 전달받은 지원자의 모든 답변에는 맞춤법 오류, 발음 유사도로 인한 단어 혼동, 조사 누락, 혹은 직무 전문 기술 용어가 엉뚱한 한국어 단어로 오인식되어 변환된 오타가 대량 포함되어 있을 수 있습니다. 이를 지원자의 전문 지식 부족이나 발화 실수로 오해하여 평가 점수를 깎거나 부정적인 코멘트를 남기지 마십시오. 전체적인 앞뒤 대화 문맥과 직무 맥락을 바탕으로 지원자가 본래 말하고자 했던 '올바른 전문 용어 및 의도된 표현'으로 100% 유추·가정하고 해석하여 온전하고 공정하게 평가 보고서를 생성하십시오.
 
 반드시 아래 지정된 JSON 형식으로만 완벽한 순수 객체 구조로 응답하세요:
 {
@@ -68,7 +72,7 @@ def generate_comprehensive_report(job: str, history: list, emotion_data: dict) -
 - 자신감(Confidence) 평균 점수: {emotion_data.get("avg_confidence", 0)}점 / 100점
 - 긴장도(Tension) 평균 점수: {emotion_data.get("avg_tension", 0)}점 / 100점
 - 안정도(Stability) 평균 점수: {emotion_data.get("avg_stability", 0)}점 / 100점
-* 참고:자신감과 안정도가 높을수록 우수하며, 긴장도가 높을수록 페이스 조절이 필요했음을 뜻합니다.
+* 참고: 자신감과 안정도가 높을수록 우수하며, 긴장도가 높을수록 페이스 조절이 필요했음을 뜻합니다.
 
 위 마이크로 데이터들을 심층 분석하여 정해진 JSON 포맷으로 최종 코칭 성적표 리포트를 생성해주세요. 사족은 절대 금지합니다.
 """
@@ -87,15 +91,13 @@ def generate_comprehensive_report(job: str, history: list, emotion_data: dict) -
     return json.loads(response.choices[0].message.content)
 
 
+# ── 엔드포인트 라우팅 매핑 허브 ───────────────────────────────────────
 @app.post("/feedback")
 async def create_feedback(req: FeedbackRequest):
-    print(f"[LLM] 피드백 생성 요청 수신")
-
     t0 = time.perf_counter()
 
     if req.is_start:
         print(f"[LLM] AI 면접관 최초 오프닝 질문 생성 가동 (직종: {req.job})")
-        
         system_prompt = (
             "당신은 현재 대기업 인사팀 출신의 베테랑 AI 면접관입니다. "
             "지원자가 선택한 직종 컨텍스트에 완벽하게 몰입하여, 지적이고 신뢰감 주는 첫 인사말을 건네세요. "
@@ -114,27 +116,26 @@ async def create_feedback(req: FeedbackRequest):
             temperature=0.7,
             max_tokens=512,
         )
-        
         opening_question = response.choices[0].message.content.strip()
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
-        
-        return {
-            "status": "success",
-            "message": opening_question,
-            "latency_ms": elapsed_ms
-        }
-    
+        return {"status": "success", "message": opening_question, "latency_ms": elapsed_ms}
+
     if req.is_chat_turn:
         print(f"[LLM] 실시간 턴제 소통 가동 (수신된 세션 총 턴 수: {len(req.history)})")
-
-        total_turns = len(req.history)
         
         system_prompt = (
             f"당신은 현재 [{req.job}] 직무 역량을 심사 중인 전문적이고 예리한 AI 면접관입니다. "
             "지원자가 직전에 제출한 마지막 답변을 주의 깊게 읽고, 면접관으로서 지적이고 공감 어리거나 혹은 보완점을 짚어주는 "
-            "가벼운 반응(Reaction)을 1~2문장으로 명확하게 구사하세요.\n\n"
+            "가벼운 반응(Reaction)을 1~2문장으로 먼저 명확하게 구사하세요.\n\n"
             
-            "★ 면접 진행 및 종료 자율 판단 규칙 (중요):\n"
+            "★ 음성 인식 오류(STT 오타) 허용 및 자동 정정 규칙 (필수):\n"
+            "실시간 음성 인식(STT) 변환의 기술적 한계로 인해 지원자의 답변 텍스트(history 내의 user 메시지)에 자잘한 맞춤법 오타, "
+            "발음 오인식 단어, 혹은 특정 핵심 기술/직무 용어가 동음이의어나 어색한 한글 텍스트로 깨져서 유입될 확률이 매우 높습니다. "
+            "이를 지원자의 실제 답변 실수로 오인하여 지적하거나, 꼬투리를 잡거나, 질문을 필터링하지 마십시오. "
+            "면접관의 고유 두뇌 단에서 앞뒤 대화의 맥락 및 해당 [{req.job}] 직무 도메인 지식을 활용하여 '지원자가 본래 의도하여 완벽하고 올바르게 발화한 것'으로 100% 가정하고 자연스럽게 필터링하여 이해하십시오. "
+            "보정된 논리를 기준으로 부드러운 리액션을 구사한 뒤 대화를 전개해야 합니다.\n\n"
+
+            "★ 면접 진행 및 종료 자율 판단 규칙:\n"
             "제공된 전체 대화 이력(history)의 문맥적 흐름과 답변의 깊이, 면접 지속 시간을 스스로 종합 평가하십시오.\n"
             "1. 만약 해당 직무 역량에 대한 검증이 충분히 완료되었거나, 면접이 충분히 오래 진행되어 마무리할 시점이라고 판단된다면, "
             "더 이상 추가 질문을 던지지 말고 지원자의 노고를 치하하는 지적이고 따뜻한 마무리 정리 멘트를 구사하십시오. "
@@ -171,6 +172,7 @@ async def create_feedback(req: FeedbackRequest):
     final_report_json = generate_comprehensive_report(req.job, req.history, req.emotion_timeline)
     final_report_json["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     print(f"[LLM] 종합 리포트 생성 완료 - 환산 점수: {final_report_json.get('overall_score')}/10")
+    
     return final_report_json
 
 
