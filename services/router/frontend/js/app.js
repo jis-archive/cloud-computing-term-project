@@ -549,7 +549,7 @@ function updateUI(data) {
         const feedbackEl = document.getElementById("face-feedback");
         if (feedbackEl) {
             feedbackEl.innerText = "화면에 얼굴이 감지되지 않습니다.\n카메라 정면을 바르게 바라봐주세요.";
-            feedbackEl.className = "warn";
+            feedbackEl.className = "null";
         }
         return;
     }

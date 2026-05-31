@@ -432,6 +432,12 @@ main {
     color: #ef4444;
 }
 
+#face-feedback.null {
+    background: rgba(100, 116, 139, 0.12);
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+}
+
 /* ── 히스토리 그래프 ── */
 #history-canvas {
     width: 100%;
