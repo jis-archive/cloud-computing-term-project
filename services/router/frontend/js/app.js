@@ -142,7 +142,7 @@ let isSpeaking = false;
 let silenceStart = null;
 let entireInterviewTranscript = "";
 
-const SILENCE_THRESHOLD = 80;
+const SILENCE_THRESHOLD = 70;
 const SILENCE_DURATION = 1000;
 
 async function connectAudioWS() {
