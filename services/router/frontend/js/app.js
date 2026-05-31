@@ -185,7 +185,7 @@ async function connectAudioWS() {
 
                 if (dataObj.type === "stt_result" && dataObj.text) {
                     const extractedText = dataObj.text.trim();
-                    const noiseHallucinationFilters = ["감사합니다."];
+                    const noiseHallucinationFilters = ["안녕하세요.", "감사합니다."];
 
                     if (noiseHallucinationFilters.includes(extractedText)) {
                         console.warn(`[VAD Filter] 주변 소음으로 인한 환각 단어가 차단되었습니다: "${extractedText}"`);
@@ -531,9 +531,14 @@ function captureAndSend() {
     ctx.drawImage(video, 0, 0);
     const b64 = canvas.toDataURL("image/jpeg", 0.7);
 
-    document.getElementById("analyzing-indicator").classList.add("active");
+    const corners = document.querySelectorAll(".camera-overlay .corner");
+    corners.forEach(corner => corner.classList.add("active"));
+
     ws.send(JSON.stringify({ frame: b64 }));
-    setTimeout(() => document.getElementById("analyzing-indicator").classList.remove("active"), 400);
+    
+    setTimeout(() => {
+        corners.forEach(corner => corner.classList.remove("active"));
+    }, 400);
 }
 
 // ── UI 업데이트 ───────────────────────────────────────────────────────────
