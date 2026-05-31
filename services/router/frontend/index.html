@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>모의면접 감정 분석</title>
-  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap"
@@ -23,6 +23,7 @@
   </header>
 
   <main>
+
     <!-- 최종 피드백 모달 -->
     <div class="modal-backdrop" id="feedback-modal">
       <div class="modal">
@@ -35,36 +36,8 @@
         </div>
       </div>
     </div>
-    <!-- 카메라 -->
-    <section class="camera-section">
-      <div class="camera-wrapper">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="canvas"></canvas>
-        <div class="camera-overlay">
-          <div class="corner tl"></div>
-          <div class="corner tr"></div>
-          <div class="corner bl"></div>
-          <div class="corner br"></div>
-          <div id="analyzing-indicator">ANALYZING</div>
-          <div id="latency-display">-- ms</div>
-        </div>
-      </div>
-      <div class="controls">
-        <button class="btn primary" id="btn-start" onclick="startCamera()">📷 카메라 시작</button>
-        <button class="btn" id="btn-stop" onclick="stopCamera()" disabled>⏹ 중지</button>
-      </div>
-      <!-- 분석 간격 슬라이더 -->
-      <div class="card" style="padding:14px 20px">
-        <div class="interval-row">
-          <label>분석 간격</label>
-          <input type="range" id="interval-slider" min="1" max="5" step="0.5" value="2.5"
-            oninput="updateInterval(this.value)" />
-          <span id="interval-label">2.5s</span>
-        </div>
-      </div>
-    </section>
 
-    <!-- 우측 패널 -->
+    <!-- 패널 -->
     <div class="panel">
 
       <!-- 핵심 지표 -->
@@ -117,9 +90,40 @@
         <div class="card-title">추이 그래프</div>
         <canvas id="history-canvas"></canvas>
       </div>
+      
       <input type="file" accept="video/mp4,video/webm,audio/*" onchange="handleFileUpload(event)">
       <span id="upload-status"></span>
     </div>
+    
+    <!-- 카메라 -->
+    <section class="camera-section" oncontextmenu="return false;">
+      <div class="camera-wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="camera-overlay">
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          <div id="analyzing-indicator">ANALYZING</div>
+          <div id="latency-display">-- ms</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn primary" id="btn-start" onclick="startCamera()">📷 카메라 시작</button>
+        <button class="btn" id="btn-stop" onclick="stopCamera()" disabled>⏹ 중지</button>
+      </div>
+      <!-- 분석 간격 슬라이더 -->
+      <div class="card" style="padding:14px 20px">
+        <div class="interval-row">
+          <label>분석 간격</label>
+          <input type="range" id="interval-slider" min="1" max="5" step="0.5" value="2.5"
+            oninput="updateInterval(this.value)" />
+          <span id="interval-label">2.5s</span>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script src="./js/app.js"></script>
