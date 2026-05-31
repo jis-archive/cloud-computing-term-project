@@ -111,10 +111,15 @@ function stopCamera() {
             if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
                 await sendCurrentSentence();
             }
+            
             if (audioStream) {
                 audioStream.getTracks().forEach(t => t.stop());
                 audioStream = null;
             }
+            
+            if (ws) { ws.close(); ws = null; }
+            if (audioWs) { audioWs.close(); audioWs = null; }
+            
             openModal();
         };
         mediaRecorder.stop();
@@ -123,11 +128,10 @@ function stopCamera() {
             audioStream.getTracks().forEach(t => t.stop());
             audioStream = null;
         }
+        if (ws) { ws.close(); ws = null; }
+        if (audioWs) { audioWs.close(); audioWs = null; }
         openModal();
     }
-
-    if (ws) { ws.close(); ws = null; }
-    if (audioWs) { audioWs.close(); audioWs = null; }
     
     document.getElementById("video").srcObject = null;
     document.getElementById("btn-start").style.display = "block";
@@ -162,14 +166,27 @@ async function connectAudioWS() {
             isSpeaking = false;
             silenceStart = null;
             isAudioRecording = true;
+
+            startNewSentenceRecorder();
         };
         
         audioWs.onmessage = (event) => {
             const rawMessage = event.data;
             try {
                 const dataObj = JSON.parse(rawMessage);
+
                 if (dataObj.type === "stt_result" && dataObj.text) {
                     const extractedText = dataObj.text.trim();
+                    const noiseHallucinationFilters = ["감사합니다."];
+
+                    if (noiseHallucinationFilters.includes(extractedText)) {
+                        console.warn(`[VAD Filter] 주변 소음으로 인한 환각 단어가 차단되었습니다: "${extractedText}"`);
+                        
+                        const textPreview = document.getElementById("mic-text-preview");
+                        if (textPreview) textPreview.textContent = "음성 입력 대기 중...";
+                        return;
+                    }
+
                     if (extractedText.length > 0) {
                         appendChatLog("interviewee", extractedText);
                         entireInterviewTranscript += extractedText + " ";
@@ -180,7 +197,7 @@ async function connectAudioWS() {
                 if (textPreview) {
                     if (dataObj.type === "buffering") {
                         textPreview.textContent = "음성 신호 압축 처리 중...";
-                    } else if (dataObj.type === "stt_result" || dataObj.type === "error") {
+                    } else if (dataObj.type === "stt_result") {
                         textPreview.textContent = "음성 입력 대기 중...";
                     }
                 }
@@ -198,6 +215,35 @@ async function connectAudioWS() {
     } catch (err) {
         console.error("[Audio] 마이크 초기화 실패:", err);
     }
+}
+
+function startNewSentenceRecorder() {
+    if (!audioStream || !isAudioRecording) return;
+
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+    
+    mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+            sentenceChunks.push(e.data);
+            
+            if (!isSpeaking) {
+                if (sentenceChunks.length > 11) { 
+                    sentenceChunks.splice(1, 1); 
+                }
+            }
+        }
+    };
+    
+    mediaRecorder.onstop = async () => {
+        if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
+            await sendCurrentSentence();
+        }
+        if (isAudioRecording) {
+            startNewSentenceRecorder();
+        }
+    };
+    
+    mediaRecorder.start(100);
 }
 
 let micAudioContext = null;
@@ -265,10 +311,9 @@ function handleVoiceActivityDetection(averageVolume) {
         
         if (!isSpeaking) {
             isSpeaking = true;
-            startSentenceRecording();
             
             const textPreview = document.getElementById("mic-text-preview");
-            if (textPreview) textPreview.textContent = "말씀하시는 중...";
+            if (textPreview) textPreview.textContent = "말하는 중...";
         }
     } else {
         if (isSpeaking) {
@@ -284,32 +329,10 @@ function handleVoiceActivityDetection(averageVolume) {
                 if (textPreview) textPreview.textContent = "AI 문장 분석 중...";
 
                 if (mediaRecorder && mediaRecorder.state === "recording") {
-                    mediaRecorder.onstop = async () => {
-                        await sendCurrentSentence();
-                    };
                     mediaRecorder.stop();
                 }
             }
         }
-    }
-}
-
-function startSentenceRecording() {
-    if (!audioStream || !isAudioRecording) return;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") return;
-
-    sentenceChunks = [];
-    try {
-        mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-                sentenceChunks.push(e.data);
-            }
-        };
-        mediaRecorder.start(100);
-        console.log("[VAD] 발화 시작 감지 - 녹음기 가동 (정상 헤더 생성)");
-    } catch (err) {
-        console.error("[VAD] 레코더 가동 실패:", err);
     }
 }
 
@@ -324,7 +347,7 @@ async function sendCurrentSentence() {
         if (audioWs && audioWs.readyState === WebSocket.OPEN) {
             audioWs.send(arrayBuffer);
             audioWs.send(JSON.stringify({ type: "end_of_audio" }));
-            console.log("[VAD] 발화 세그먼트 전송 및 완료 신호 송신 완료");
+            console.log("[VAD] 1초 Pre-roll이 포함된 발화 세그먼트 전송 완료");
         }
     } catch (err) {
         console.error("[VAD] 오디오 바이너리 포워딩 실패:", err);
