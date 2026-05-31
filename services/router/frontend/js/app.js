@@ -397,7 +397,7 @@ function handleVoiceActivityDetection(averageVolume) {
         
         if (!isSpeaking) {
             isSpeaking = true;
-            
+            startSilenceTimer();
             const textPreview = document.getElementById("mic-text-preview");
             if (textPreview) textPreview.textContent = "말하는 중...";
         }
