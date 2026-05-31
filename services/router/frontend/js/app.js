@@ -22,6 +22,9 @@ let historyConf = [];
 let historyTens = [];
 const MAX_HISTORY = 30;
 
+let interviewSessionHistory = [];
+let currentTurnAnswer = "";
+
 // ── mp4 파일 업로드 → STT ─────────────────────────────────────────────────
 async function handleFileUpload(event) {
     const file = event.target.files[0];
@@ -94,6 +97,8 @@ async function startCamera() {
         latestEmotionResult = null;
         historyConf = [];
         historyTens = [];
+        interviewSessionHistory = [];
+        currentTurnAnswer = "";
 
         const chatLog = document.getElementById("chat-log");
         if (chatLog) {
@@ -117,6 +122,7 @@ async function startCamera() {
             if (chatLog) {
                 chatLog.innerHTML = `<div class="chat-message system">모의 면접 세션이 개시되었습니다.</div>`;
                 appendChatLog("interviewer", data.message);
+                interviewSessionHistory.push({ role: "interviewer", text: data.message });
             }
         } catch (llmErr) {
             console.error("[LLM Start] 면접 오프닝 로드 실패:", llmErr);
@@ -266,7 +272,10 @@ async function connectAudioWS() {
                     if (extractedText.length > 0) {
                         appendChatLog("interviewee", extractedText);
                         entireInterviewTranscript += extractedText + " ";
+                        currentTurnAnswer += extractedText + " ";
                         startSilenceTimer();
+                        entireInterviewTranscript += extractedText + " ";
+                        latestSttResult = dataObj;
                     }
                 }
                 
@@ -523,14 +532,46 @@ function resetSilenceTimer() {
 
 function triggerSilenceTimeout() {
     resetSilenceTimer();
-    console.log("[Turn Control] 5초 무음 감지 완료. 사용자의 답변이 끝난 것으로 판단합니다.");
-    
+    interviewSessionHistory.push({ role: "interviewee", text: currentTurnAnswer.trim() });    
     const chatLog = document.getElementById("chat-log");
     if (chatLog) {
-        chatLog.innerHTML += `<div class="chat-message system">무음이 5초간 지속되어 답변이 제출되었습니다. 피드백을 생성합니다.</div>`;
         chatLog.scrollTop = chatLog.scrollHeight;
     }
+    requestNextTurn();
+}
 
+async function requestNextTurn() {
+    try {
+        const response = await fetch(LLM_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                is_start: false,
+                is_chat_turn: true,
+                job: window.currentJobTitle || "소프트웨어 개발자",
+                history: interviewSessionHistory,
+                stt_result: { text: currentTurnAnswer.trim() },
+                emotion_result: latestEmotionResult || { confidence: 70, tension: 20, stability: 80 }
+            })
+        });
+        
+        const loadingEl = document.getElementById("ai-loading");
+        if (loadingEl) loadingEl.remove();
+
+        if (!response.ok) throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
+        const data = await response.json();
+
+        appendChatLog("interviewer", data.message);
+        
+        interviewSessionHistory.push({ role: "interviewer", text: data.message });
+        
+        currentTurnAnswer = "";
+    } catch (err) {
+        console.error("[Turn Interaction Error] 면접관 소통 장애:", err);
+        const loadingEl = document.getElementById("ai-loading");
+        if (loadingEl) loadingEl.remove();
+        appendChatLog("interviewer", "죄송합니다 지원자님, 오디오 스트림 수신 문제로 답변을 잠시 놓쳤습니다. 다음 말씀 이어가 주시겠어요?");
+    }
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────

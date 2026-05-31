@@ -18,7 +18,9 @@ class FeedbackRequest(BaseModel):
     stt_result: dict = {}
     emotion_result: dict = {}
     is_start: bool = False
+    is_chat_turn: bool = False 
     job: str = "개발자"
+    history: list = []
 
 
 FEEDBACK_SYSTEM_PROMPT = """
@@ -104,6 +106,39 @@ async def create_feedback(req: FeedbackRequest):
         return {
             "status": "success",
             "message": opening_question,
+            "latency_ms": elapsed_ms
+        }
+    
+    if req.is_chat_turn:
+        print(f"[LLM] 실시간 턴제 소통 가동 (수신된 세션 총 턴 수: {len(req.history)})")
+        
+        system_prompt = (
+            f"당신은 현재 [{req.job}] 직무 역량을 심사 중인 전문적이고 예리한 AI 면접관입니다. "
+            "지원자가 직전에 제출한 마지막 답변(history의 가장 마지막 user 메시지)을 주의 깊게 읽고, "
+            "면접관으로서 지적이고 공감 어리거나 혹은 보완점을 짚어주는 가벼운 반응(Reaction)을 1~2문장으로 먼저 명확하게 구사하세요. "
+            "그 이후, 대화 이력(history) 전체의 유기적인 문맥 맥락을 완벽히 이어받아, 해당 직무 전문성을 더욱 깊이 파고드는 "
+            "다음 단계 면접 질문을 '딱 한 가지만' 자연스럽게 연결하여 질문하십시오.\n"
+            "주의: 완벽한 면접관의 대사체 구어문 형식으로만 출력하고, 안내선이나 이외의 설명 사족은 절대로 배제하세요."
+        )
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        for turn in req.history:
+            role = "assistant" if turn.get("role") == "interviewer" else "user"
+            messages.append({"role": role, "content": turn.get("text", "")})
+            
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=messages,
+            temperature=0.6,
+            max_tokens=512,
+        )
+        
+        interviewer_reply = response.choices[0].message.content.strip()
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
+        
+        return {
+            "status": "success",
+            "message": interviewer_reply,
             "latency_ms": elapsed_ms
         }
 
