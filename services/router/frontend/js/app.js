@@ -106,6 +106,14 @@ function stopCamera() {
     
     isAudioRecording = false;
     
+    if (stream) {
+        stream.getTracks().forEach(track => {
+            track.stop();
+            console.log(`[Camera] 비디오 트랙 해제 완료: ${track.label}`);
+        });
+        stream = null;
+    }
+
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.onstop = async () => {
             if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
@@ -132,7 +140,7 @@ function stopCamera() {
         if (audioWs) { audioWs.close(); audioWs = null; }
         openModal();
     }
-    
+
     document.getElementById("video").srcObject = null;
     document.getElementById("btn-start").style.display = "block";
     document.getElementById("btn-stop").style.display = "none";
