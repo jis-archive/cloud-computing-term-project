@@ -394,10 +394,10 @@ function handleVoiceActivityDetection(averageVolume) {
 
     if (averageVolume > SILENCE_THRESHOLD) {
         silenceStart = null;
+        feedSilenceTimer();
         
         if (!isSpeaking) {
             isSpeaking = true;
-            feedSilenceTimer();
             const textPreview = document.getElementById("mic-text-preview");
             if (textPreview) textPreview.textContent = "말하는 중...";
         }
@@ -556,7 +556,7 @@ function feedSilenceTimer() {
     if (silenceTimeoutId) {
         clearTimeout(silenceTimeoutId);
     }
-    
+
     silenceTimeoutId = setTimeout(() => {
         triggerSilenceTimeout();
     }, SILENCE_LIMIT_MS);
