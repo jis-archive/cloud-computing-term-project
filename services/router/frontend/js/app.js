@@ -87,6 +87,44 @@ async function startCamera() {
     try {
         entireInterviewTranscript = "";
         latestSttResult = null;
+        latestEmotionResult = null;
+        historyConf = [];
+        historyTens = [];
+        
+        const chatLog = document.getElementById("chat-log");
+        if (chatLog) {
+            chatLog.innerHTML = '<div class="chat-message system">면접 시작 버튼을 누르면 AI 면접관과의 대화가 개시됩니다.</div>';
+        }
+        
+        ["confidence", "tension", "stability"].forEach(name => {
+            const valEl = document.getElementById(`${name}-value`);
+            const fillEl = document.getElementById(`${name}-fill`);
+            if (valEl) valEl.textContent = "--";
+            if (fillEl) fillEl.style.width = "0%";
+        });
+        
+        const feedbackEl = document.getElementById("face-feedback");
+        if (feedbackEl) {
+            feedbackEl.innerText = "면접을 시작하면 분석을 시작합니다";
+            feedbackEl.className = "";
+        }
+        
+        const emotionGrid = document.getElementById("emotion-grid");
+        if (emotionGrid) {
+            emotionGrid.innerHTML = '<div class="empty-state" style="grid-column:1/3">분석 대기 중...</div>';
+        }
+        
+        const canvas = document.getElementById("history-canvas");
+        if (canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        const statusEl = document.getElementById("upload-status");
+        if (statusEl) {
+            statusEl.textContent = "";
+            statusEl.style.display = "none";
+        }
         
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         document.getElementById("video").srcObject = stream;
