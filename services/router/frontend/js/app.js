@@ -142,7 +142,7 @@ let isSpeaking = false;
 let silenceStart = null;
 let entireInterviewTranscript = "";
 
-const SILENCE_THRESHOLD = 90;
+const SILENCE_THRESHOLD = 80;
 const SILENCE_DURATION = 1000;
 
 async function connectAudioWS() {
@@ -201,7 +201,6 @@ let micAnalyser = null;
 let micSource = null;
 let micAnimationId = null;
 
-// ── 마이크 주파수 진폭 분석기 가동 ──────────────────────────────────────
 function startMicVolumeAnalysis(stream) {
     stopMicVolumeAnalysis();
 
@@ -236,8 +235,6 @@ function startMicVolumeAnalysis(stream) {
             const average = sum / bufferLength;
             const volumeFactor = Math.min(average / 90, 1.0);
 
-            // console.log("Current Average Volume:", average);
-            
             if (outerCircle && innerCircle) {
                 const scale = 1.0 + (volumeFactor * 1.3);
                 innerCircle.style.transform = `scale(${scale})`;
@@ -270,7 +267,7 @@ function handleVoiceActivityDetection(averageVolume) {
             startSentenceRecording();
             
             const textPreview = document.getElementById("mic-text-preview");
-            if (textPreview) textPreview.textContent = "말씀하시는 중...";
+            if (textPreview) textPreview.textContent = "말하는 중...";
         } else {
             silenceStart = null;
         }
