@@ -85,15 +85,42 @@ function connectWS() {
 // ── 카메라 ────────────────────────────────────────────────────────────────
 async function startCamera() {
     try {
+        const jobInput = document.getElementById("job-input");
+        const selectedJob = jobInput ? jobInput.value.trim() : "개발자";
+        if (jobInput) jobInput.disabled = true;
+        
         entireInterviewTranscript = "";
         latestSttResult = null;
         latestEmotionResult = null;
         historyConf = [];
         historyTens = [];
-        
+
         const chatLog = document.getElementById("chat-log");
         if (chatLog) {
-            chatLog.innerHTML = '<div class="chat-message system">면접 시작 버튼을 누르면 AI 면접관과의 대화가 개시됩니다.</div>';
+            chatLog.innerHTML = `<div class="chat-message system">[시스템] LLM 면접관이 [${selectedJob}] 첫 질문을 출제하고 있습니다...</div>`;
+        }
+        
+        try {
+            const response = await fetch(LLM_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    is_start: true,
+                    job: selectedJob,
+                    text: ""
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (chatLog) {
+                chatLog.innerHTML = `<div class="chat-message system">모의 면접 세션이 개시되었습니다.</div>`;
+                appendChatLog("interviewer", data.message);
+            }
+        } catch (llmErr) {
+            console.error("[LLM Start] 면접 오프닝 로드 실패:", llmErr);
+            appendChatLog("interviewer", `안녕하세요. 연결 상태가 원활하지 않아 기본 공통 질문을 드립니다. [${selectedJob}] 직무에 지원하게 된 동기와 준비 과정에 대해 말씀해 주세요.`);
         }
         
         ["confidence", "tension", "stability"].forEach(name => {
@@ -105,8 +132,8 @@ async function startCamera() {
         
         const feedbackEl = document.getElementById("face-feedback");
         if (feedbackEl) {
-            feedbackEl.innerText = "면접을 시작하면 분석을 시작합니다";
-            feedbackEl.className = "";
+            feedbackEl.innerText = "얼굴 감지 시스템 가동 중...";
+            feedbackEl.className = ""; 
         }
         
         const emotionGrid = document.getElementById("emotion-grid");
@@ -125,7 +152,7 @@ async function startCamera() {
             statusEl.textContent = "";
             statusEl.style.display = "none";
         }
-        
+
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         document.getElementById("video").srcObject = stream;
         document.getElementById("btn-start").style.display = "none";
@@ -141,9 +168,11 @@ async function startCamera() {
 function stopCamera() {
     stopLoop();
     stopMicVolumeAnalysis();
-    
     isAudioRecording = false;
-    
+
+    const jobInput = document.getElementById("job-input");
+    if (jobInput) jobInput.disabled = false;
+
     if (stream) {
         stream.getTracks().forEach(track => {
             track.stop();

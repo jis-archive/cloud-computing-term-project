@@ -15,8 +15,10 @@ print("[LLM] Groq 클라이언트 초기화 완료!")
 
 
 class FeedbackRequest(BaseModel):
-    stt_result: dict      # {"text": "...", "language": "ko", "duration": 12.4}
-    emotion_result: dict  # {"confidence": 72.1, "tension": 18.3, "stability": 81.7}
+    stt_result: dict = {}
+    emotion_result: dict = {}
+    is_start: bool = False
+    job: str = "개발자"
 
 
 FEEDBACK_SYSTEM_PROMPT = """
@@ -74,8 +76,41 @@ async def create_feedback(req: FeedbackRequest):
     print(f"[LLM] 피드백 생성 요청 수신")
 
     t0 = time.perf_counter()
+
+    if req.is_start:
+        print(f"[LLM] AI 면접관 최초 오프닝 질문 생성 가동 (직종: {req.job})")
+        
+        system_prompt = (
+            "당신은 대기업 인사팀 출신의 베테랑 AI 면접관입니다. "
+            "지원자가 선택한 직종 컨텍스트에 완벽하게 몰입하여, 지적이고 신뢰감 주는 첫 인사말을 건네세요. "
+            "그 직후 해당 직무의 전문성을 검증할 수 있는 날카롭고 참신한 첫 번째 면접 질문을 딱 '하나'만 명확하게 제시하세요. "
+            "주의: 시스템 설명조의 군더더기 문장이나 사족은 완전히 배제하고, 실제 면접관의 대사만 자연스럽게 출력하세요."
+        )
+        user_message = f"지원자가 응시하려는 면접 직종은 [{req.job}] 입니다. 첫인사와 직무 검증 첫 핵심 질문을 생성해 주세요."
+        
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_message},
+            ],
+            temperature=0.7,
+            max_tokens=512,
+        )
+        
+        opening_question = response.choices[0].message.content.strip()
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
+        
+        return {
+            "status": "success",
+            "message": opening_question,
+            "latency_ms": elapsed_ms
+        }
+
+    print(f"[LLM] 면접 종료 세션 - 종합 분석 피드백 생성 요청 수신")
     print(f"req.stt_result: {req.stt_result}")
     print(f"req.emotion_result: {req.emotion_result}")
+    
     result = generate_feedback(req.stt_result, req.emotion_result)
     result["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
 
