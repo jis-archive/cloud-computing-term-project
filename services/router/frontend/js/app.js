@@ -17,10 +17,13 @@ let latestSttResult = null;
 let ws = null;
 let stream = null;
 let intervalId = null;
-let intervalSec = 2.5;
+let intervalSec = 1.0;
 let historyConf = [];
 let historyTens = [];
 const MAX_HISTORY = 30;
+
+let interviewSessionHistory = [];
+let currentTurnAnswer = "";
 
 // ── mp4 파일 업로드 → STT ─────────────────────────────────────────────────
 async function handleFileUpload(event) {
@@ -85,10 +88,82 @@ function connectWS() {
 // ── 카메라 ────────────────────────────────────────────────────────────────
 async function startCamera() {
     try {
+        const jobInput = document.getElementById("job-input");
+        const selectedJob = jobInput ? jobInput.value.trim() : "개발자";
+        if (jobInput) jobInput.disabled = true;
+        
+        entireInterviewTranscript = "";
+        latestSttResult = null;
+        latestEmotionResult = null;
+        historyConf = [];
+        historyTens = [];
+        interviewSessionHistory = [];
+        currentTurnAnswer = "";
+
+        const chatLog = document.getElementById("chat-log");
+        if (chatLog) {
+            chatLog.innerHTML = `<div class="chat-message system">LLM 면접관이 ${selectedJob} 면접의 첫 질문을 출제하고 있습니다...</div>`;
+        }
+        
+        try {
+            const response = await fetch(LLM_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    is_start: true,
+                    job: selectedJob,
+                    text: ""
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (chatLog) {
+                chatLog.innerHTML = `<div class="chat-message system">모의 면접 세션이 개시되었습니다.</div>`;
+                appendChatLog("interviewer", data.message);
+                interviewSessionHistory.push({ role: "interviewer", text: data.message });
+            }
+        } catch (llmErr) {
+            console.error("[LLM Start] 면접 오프닝 로드 실패:", llmErr);
+            appendChatLog("interviewer", `안녕하세요. 연결 상태가 원활하지 않아 기본 공통 질문을 드립니다. ${selectedJob} 직무에 지원하게 된 동기와 준비 과정에 대해 말씀해 주세요.`);
+        }
+        
+        ["confidence", "tension", "stability"].forEach(name => {
+            const valEl = document.getElementById(`${name}-value`);
+            const fillEl = document.getElementById(`${name}-fill`);
+            if (valEl) valEl.textContent = "--";
+            if (fillEl) fillEl.style.width = "0%";
+        });
+        
+        const feedbackEl = document.getElementById("face-feedback");
+        if (feedbackEl) {
+            feedbackEl.innerText = "얼굴 감지 시스템 가동 중...";
+            feedbackEl.className = ""; 
+        }
+        
+        const emotionGrid = document.getElementById("emotion-grid");
+        if (emotionGrid) {
+            emotionGrid.innerHTML = '<div class="empty-state" style="grid-column:1/3">분석 대기 중...</div>';
+        }
+        
+        const canvas = document.getElementById("history-canvas");
+        if (canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        const statusEl = document.getElementById("upload-status");
+        if (statusEl) {
+            statusEl.textContent = "";
+            statusEl.style.display = "none";
+        }
+
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         document.getElementById("video").srcObject = stream;
-        document.getElementById("btn-start").disabled = true;
-        document.getElementById("btn-stop").disabled = false;
+        document.getElementById("btn-start").style.display = "none";
+        document.getElementById("btn-stop").style.display = "block";
+        
         connectWS();
         connectAudioWS();
     } catch (err) {
@@ -98,34 +173,51 @@ async function startCamera() {
 
 function stopCamera() {
     stopLoop();
+    stopMicVolumeAnalysis();
+    resetSilenceTimer();
+    isAudioRecording = false;
+
+    const jobInput = document.getElementById("job-input");
+    if (jobInput) jobInput.disabled = false;
+
+    if (stream) {
+        stream.getTracks().forEach(track => {
+            track.stop();
+            console.log(`[Camera] 비디오 트랙 해제 완료: ${track.label}`);
+        });
+        stream = null;
+    }
 
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.onstop = () => {
-            if (audioWs && audioWs.readyState === WebSocket.OPEN) {
-                audioWs.send(JSON.stringify({ type: "end_of_audio" }));
-                console.log("[Audio] end_of_audio 전송 — STT 대기 중...");
+        mediaRecorder.onstop = async () => {
+            if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
+                await sendCurrentSentence();
             }
             
             if (audioStream) {
                 audioStream.getTracks().forEach(t => t.stop());
                 audioStream = null;
             }
+            
+            if (ws) { ws.close(); ws = null; }
+            if (audioWs) { audioWs.close(); audioWs = null; }
+            
+            openModal();
         };
         mediaRecorder.stop();
     } else {
+        if (audioStream) {
+            audioStream.getTracks().forEach(t => t.stop());
+            audioStream = null;
+        }
+        if (ws) { ws.close(); ws = null; }
+        if (audioWs) { audioWs.close(); audioWs = null; }
         openModal();
     }
 
-    if (ws) { ws.close(); ws = null; }
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    if (audioStream) {
-        audioStream.getTracks().forEach(t => t.stop());
-        audioStream = null;
-    }
-    
     document.getElementById("video").srcObject = null;
-    document.getElementById("btn-start").disabled = false;
-    document.getElementById("btn-stop").disabled = true;
+    document.getElementById("btn-start").style.display = "block";
+    document.getElementById("btn-stop").style.display = "none";
     setStatus("", "연결 대기중");
 }
 
@@ -133,60 +225,398 @@ function stopCamera() {
 let audioWs = null;
 let mediaRecorder = null;
 let audioStream = null;
+let isAudioRecording = false;
+
+let sentenceChunks = [];
+let isSpeaking = false;
+let silenceStart = null;
+let entireInterviewTranscript = "";
+
+const SILENCE_THRESHOLD = 50;
+const SILENCE_DURATION = 800;
 
 async function connectAudioWS() {
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-        console.warn("[Audio] 마이크 접근 실패 — 파일 업로드 모드로 전환:", err.message);
-        return;
-    }
+        startMicVolumeAnalysis(audioStream);
+        
+        audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
+        
+        audioWs.onopen = () => {
+            console.log("[Audio] 게이트웨이 음성 웹소켓 연결 성공");
+            sentenceChunks = [];
+            isSpeaking = false;
+            silenceStart = null;
+            isAudioRecording = true;
 
-    audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
+            startNewSentenceRecorder();
+        };
+        
+        audioWs.onmessage = (event) => {
+            const rawMessage = event.data;
+            try {
+                const dataObj = JSON.parse(rawMessage);
 
-    audioWs.onopen = () => {
-        console.log("[Audio WS] 연결됨");
+                if (dataObj.type === "stt_result" && dataObj.text) {
+                    const extractedText = dataObj.text.trim();
+                    const noiseHallucinationFilters = ["안녕하세요.", "감사합니다."];
 
-        mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+                    if (noiseHallucinationFilters.includes(extractedText)) {
+                        console.warn(`[VAD Filter] 주변 소음으로 인한 환각 단어가 차단되었습니다: "${extractedText}"`);
+                        
+                        const textPreview = document.getElementById("mic-text-preview");
+                        if (textPreview) textPreview.textContent = "음성 입력 대기 중...";
+                        return;
+                    }
 
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0 && audioWs.readyState === WebSocket.OPEN) {
-                audioWs.send(e.data);
+                    if (extractedText.length > 0) {
+                        appendChatLog("interviewee", extractedText);
+                        entireInterviewTranscript += extractedText + " ";
+                        currentTurnAnswer += extractedText + " ";
+                        startSilenceTimer();
+                        entireInterviewTranscript += extractedText + " ";
+                        latestSttResult = dataObj;
+                    }
+                }
+                
+                const textPreview = document.getElementById("mic-text-preview");
+                if (textPreview) {
+                    if (dataObj.type === "buffering") {
+                        textPreview.textContent = "음성 신호 압축 처리 중...";
+                    } else if (dataObj.type === "stt_result") {
+                        textPreview.textContent = "음성 입력 대기 중...";
+                    }
+                }
+            } catch (jsonErr) {
+                if (rawMessage && typeof rawMessage === "string" && !rawMessage.startsWith("{")) {
+                    appendChatLog("interviewee", rawMessage.trim());
+                    entireInterviewTranscript += rawMessage.trim() + " ";
+                }
             }
         };
+        
+        audioWs.onerror = (err) => console.error("[Audio] 소켓 에러:", err);
+        audioWs.onclose = () => console.log("[Audio] 소켓 연결 종료");
+        
+    } catch (err) {
+        console.error("[Audio] 마이크 초기화 실패:", err);
+    }
+}
 
-        mediaRecorder.start(2500);
-    };
+function startNewSentenceRecorder() {
+    if (!audioStream || !isAudioRecording) return;
 
-    audioWs.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-
-        if (msg.type === "buffering") {
-            console.log(`[Audio] 버퍼링 중: ${msg.buffered_bytes} bytes`);
-            return;
-        }
-
-        if (msg.type === "stt_result") {
-            latestSttResult = {
-                text: msg.text ?? "",
-                language: msg.language ?? "ko",
-                duration: msg.duration ?? 0,
-            };
-            console.log("[STT] 변환 완료:", latestSttResult.text);
-            openModal();
-            return;
-        }
-
-        if (msg.type === "error") {
-            console.error("[STT] 오류:", msg.message);
-            openModal();
-            if (audioWs) { audioWs.close(); audioWs = null; }
-            return;
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+    
+    mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+            sentenceChunks.push(e.data);
+            
+            if (!isSpeaking) {
+                if (sentenceChunks.length > 11) { 
+                    sentenceChunks.splice(1, 1); 
+                }
+            }
         }
     };
+    
+    mediaRecorder.onstop = async () => {
+        if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
+            await sendCurrentSentence();
+        }
+        if (isAudioRecording) {
+            startNewSentenceRecorder();
+        }
+    };
+    
+    mediaRecorder.start(100);
+}
 
-    audioWs.onclose = () => console.log("[Audio WS] 연결 끊김");
-    audioWs.onerror = (e) => console.error("[Audio WS] 오류", e);
+let micAudioContext = null;
+let micAnalyser = null;
+let micSource = null;
+let micAnimationId = null;
+
+function startMicVolumeAnalysis(stream) {
+    stopMicVolumeAnalysis();
+
+    try {
+        micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        micAnalyser = micAudioContext.createAnalyser();
+        micAnalyser.fftSize = 64;
+        
+        micSource = micAudioContext.createMediaStreamSource(stream);
+        micSource.connect(micAnalyser);
+        
+        const bufferLength = micAnalyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        const outerCircle = document.getElementById("mic-outer");
+        const innerCircle = document.getElementById("mic-inner");
+        const textPreview = document.getElementById("mic-text-preview");
+        
+        if (textPreview) textPreview.textContent = "음성 입력 감지 중...";
+
+        function analyzeFrame() {
+            if (!micAnalyser) return;
+            micAnimationId = requestAnimationFrame(analyzeFrame);
+            
+            micAnalyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+
+            const average = sum / bufferLength;
+            const volumeFactor = Math.min(average / 90, 1.0);
+
+            if (outerCircle && innerCircle) {
+                const scale = 1.0 + (volumeFactor * 1.3);
+                innerCircle.style.transform = `scale(${scale})`;
+                outerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.08 + (volumeFactor * 0.45)})`;
+                outerCircle.style.borderColor = `rgba(16, 185, 129, ${0.2 + (volumeFactor * 0.62)})`;
+                innerCircle.style.backgroundColor = `rgba(16, 185, 129, ${0.25 + (volumeFactor * 0.65)})`;
+                if (volumeFactor > 0.15) outerCircle.style.boxShadow = `0 0 ${volumeFactor * 25}px rgba(16, 185, 129, 0.6)`;
+                else outerCircle.style.boxShadow = "none";
+            }
+            
+            handleVoiceActivityDetection(average);
+        }
+        analyzeFrame();
+    } catch (err) {
+        console.error("[MicMonitor] Web Audio API 가동 에러:", err);
+    }
+}
+
+function handleVoiceActivityDetection(averageVolume) {
+    if (!audioWs || audioWs.readyState !== WebSocket.OPEN) return;
+
+    if (averageVolume > SILENCE_THRESHOLD) {
+        silenceStart = null;
+        feedSilenceTimer();
+        
+        if (!isSpeaking) {
+            isSpeaking = true;
+            const textPreview = document.getElementById("mic-text-preview");
+            if (textPreview) textPreview.textContent = "말하는 중...";
+        }
+    } else {
+        if (isSpeaking) {
+            if (silenceStart === null) {
+                silenceStart = Date.now();
+            } else if (Date.now() - silenceStart >= SILENCE_DURATION) {
+                console.log(`[VAD] 문장 마침 확정 (${SILENCE_DURATION}ms 무음 유지). 전송 프로세스 작동.`);
+                
+                isSpeaking = false;
+                silenceStart = null;
+                
+                const textPreview = document.getElementById("mic-text-preview");
+                if (textPreview) textPreview.textContent = "AI 문장 분석 중...";
+
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                }
+            }
+        }
+    }
+}
+
+async function sendCurrentSentence() {
+    if (sentenceChunks.length === 0) return;
+    
+    const sentenceBlob = new Blob(sentenceChunks, { type: "audio/webm" });
+    sentenceChunks = []; 
+    
+    try {
+        const arrayBuffer = await sentenceBlob.arrayBuffer();
+        if (audioWs && audioWs.readyState === WebSocket.OPEN) {
+            audioWs.send(arrayBuffer);
+            audioWs.send(JSON.stringify({ type: "end_of_audio" }));
+            console.log("[VAD] 1초 Pre-roll이 포함된 발화 세그먼트 전송 완료");
+        }
+    } catch (err) {
+        console.error("[VAD] 오디오 바이너리 포워딩 실패:", err);
+    }
+}
+
+function stripMarkdown(text) {
+    if (!text) return "";
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '$1')   // **볼드** -> 볼드
+        // .replace(/__(.*?)__/g, '$1')       // __볼드__ -> 볼드
+        // .replace(/\*(.*?)\*/g, '$1')       // *이탤릭* -> 이탤릭
+        // .replace(/_(.*?)_/g, '$1')         // _이탤릭* -> 이탤릭
+        // .replace(/`(.*?)`/g, '$1')         // `코드` -> 코드
+        // .replace(/[-*+]\s+/g, '')          // 불필요한 리스트 불릿 기호 제거 (- , * , + )
+        // .replace(/#{1,6}\s+/g, '')         // 샵(#) 헤더 표시 제거
+        // .replace(/\*\*/g, '')              // 혹시 낱개로 깨져서 남은 볼드 기호 청소
+        // .replace(/\*/g, '');               // 혹시 낱개로 깨져서 남은 이탤릭 기호 청소
+}
+
+function appendChatLog(sender, text) {
+    const chatLog = document.getElementById("chat-log");
+    if (!chatLog) return;
+
+    if (sender === "interviewer") {
+        text = stripMarkdown(text);
+    }
+    
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `chat-message ${sender}`; // interviewee 또는 interviewer 적용
+    messageDiv.textContent = text;
+    
+    chatLog.appendChild(messageDiv);
+    
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// ── 마이크 분석 엔진 정지 및 리셋 ──────────────────────────────────────
+function stopMicVolumeAnalysis() {
+    if (micAnimationId) {
+        cancelAnimationFrame(micAnimationId);
+        micAnimationId = null;
+    }
+    if (micSource) { micSource.disconnect(); micSource = null; }
+    if (micAnalyser) { micAnalyser = null; }
+    if (micAudioContext) {
+        if (micAudioContext.state !== "closed") micAudioContext.close();
+        micAudioContext = null;
+    }
+    
+    // UI 컴포넌트 초기 원상 복구
+    const outerCircle = document.getElementById("mic-outer");
+    const innerCircle = document.getElementById("mic-inner");
+    const textPreview = document.getElementById("mic-text-preview");
+    
+    if (outerCircle && innerCircle) {
+        innerCircle.style.transform = "scale(1)";
+        outerCircle.style.backgroundColor = "rgba(16, 185, 129, 0.08)";
+        outerCircle.style.borderColor = "rgba(16, 185, 129, 0.2)";
+        innerCircle.style.backgroundColor = "rgba(16, 185, 129, 0.25)";
+        outerCircle.style.boxShadow = "none";
+    }
+    if (textPreview) textPreview.textContent = "마이크 입력 꺼짐";
+}
+
+let silenceTimeoutId = null;
+let timerAnimationFrameId = null;
+let silenceStartTime = null;
+const SILENCE_LIMIT_MS = 10000;
+
+function startSilenceTimer() {
+    resetSilenceTimer();
+
+    silenceStartTime = Date.now();
+    const timerBar = document.getElementById("silence-timer-bar");
+
+    silenceTimeoutId = setTimeout(() => {
+        triggerSilenceTimeout();
+    }, SILENCE_LIMIT_MS);
+
+    function updateProgress() {
+        if (!silenceStartTime) return;
+        
+        const elapsed = Date.now() - silenceStartTime;
+        const remainingPercentage = Math.max(0, 100 - (elapsed / SILENCE_LIMIT_MS) * 100);
+        
+        if (timerBar) {
+            timerBar.style.width = `${remainingPercentage}%`;
+        }
+
+        if (elapsed < SILENCE_LIMIT_MS) {
+            timerAnimationFrameId = requestAnimationFrame(updateProgress);
+        }
+    }
+    timerAnimationFrameId = requestAnimationFrame(updateProgress);
+}
+
+function resetSilenceTimer() {
+    if (silenceTimeoutId) {
+        clearTimeout(silenceTimeoutId);
+        silenceTimeoutId = null;
+    }
+    if (timerAnimationFrameId) {
+        cancelAnimationFrame(timerAnimationFrameId);
+        timerAnimationFrameId = null;
+    }
+    silenceStartTime = null;
+
+    const timerBar = document.getElementById("silence-timer-bar");
+    if (timerBar) {
+        timerBar.style.width = "100%";
+    }
+}
+
+function feedSilenceTimer() {
+    if (!silenceStartTime) return;
+
+    silenceStartTime = Date.now();
+
+    if (silenceTimeoutId) {
+        clearTimeout(silenceTimeoutId);
+    }
+
+    silenceTimeoutId = setTimeout(() => {
+        triggerSilenceTimeout();
+    }, SILENCE_LIMIT_MS);
+}
+
+function triggerSilenceTimeout() {
+    resetSilenceTimer();
+    interviewSessionHistory.push({ role: "interviewee", text: currentTurnAnswer.trim() });    
+    const chatLog = document.getElementById("chat-log");
+    if (chatLog) {
+        chatLog.scrollTop = chatLog.scrollHeight;
+    }
+    requestNextTurn();
+}
+
+async function requestNextTurn() {
+    try {
+        const response = await fetch(LLM_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                is_start: false,
+                is_chat_turn: true,
+                job: window.currentJobTitle || "소프트웨어 개발자",
+                history: interviewSessionHistory,
+                stt_result: { text: currentTurnAnswer.trim() },
+                emotion_result: latestEmotionResult || { confidence: 70, tension: 20, stability: 80 }
+            })
+        });
+        
+        const loadingEl = document.getElementById("ai-loading");
+        if (loadingEl) loadingEl.remove();
+
+        if (!response.ok) throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
+        const data = await response.json();
+
+        let aiMessage = data.message;
+        
+        const isInterviewFinished = aiMessage.includes("[면접 종료]");
+        
+        if (isInterviewFinished) {
+            aiMessage = aiMessage.replace("[면접 종료]", "").trim();
+        }
+
+        appendChatLog("interviewer", aiMessage);
+        interviewSessionHistory.push({ role: "interviewer", text: aiMessage });
+        currentTurnAnswer = "";
+        
+        if (isInterviewFinished) {
+            appendChatLog("system", "AI 면접관이 질문을 모두 마쳤습니다.");
+            stopCamera();
+            return; 
+        }
+        
+    } catch (err) {
+        console.error("[Turn Interaction Error] 면접관 소통 장애:", err);
+        const loadingEl = document.getElementById("ai-loading");
+        if (loadingEl) loadingEl.remove();
+        appendChatLog("interviewer", "죄송합니다 지원자님, 답변 컨텍스트 수신 중 일시적인 지연이 발생했습니다. 말씀을 이어서 해주세요.");
+    }
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────
@@ -203,34 +633,44 @@ function closeModal() {
 
 // ── LLM 피드백 요청 ───────────────────────────────────────────────────────
 async function requestFeedback() {
-    if (!latestSttResult) {
-        const arrived = await waitForStt(30000);
-        if (!arrived) {
-            console.warn("[Feedback] STT 타임아웃 — 감정 데이터만으로 피드백 진행");
-        }
-    }
+    const totalRecords = historyConf.length;
+    const avgConfidence = totalRecords > 0 ? (historyConf.reduce((a, b) => a + b, 0) / totalRecords) : 0;
+    const avgTension = totalRecords > 0 ? (historyTens.reduce((a, b) => a + b, 0) / totalRecords) : 0;
+    const avgStability = Math.max(0, 100 - avgTension);
+    
+    const jobInput = document.getElementById("job-input");
+    const selectedJob = jobInput ? jobInput.value.trim() : "개발자";
 
-    const emotion = latestEmotionResult ?? { confidence: 0, tension: 0, stability: 0, raw: {} };
-    const stt = latestSttResult ?? { text: "", language: "ko", duration: 0 };
-
-    console.log("[Feedback] 요청 payload:", { stt_result: stt, emotion_result: emotion });
+    const summaryEl = document.getElementById("modal-speech-summary");
+    if (summaryEl) summaryEl.textContent = "인공지능이 면접 스크립트 문맥과 표정 흐름을 종합 심사 중입니다...";
 
     try {
-        const res = await fetch(LLM_URL, {
+        const response = await fetch(LLM_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stt_result: stt, emotion_result: emotion }),
+            body: JSON.stringify({
+                is_start: false,
+                is_chat_turn: false,
+                job: selectedJob,
+                history: interviewSessionHistory,
+                emotion_timeline: {
+                    avg_confidence: Math.round(avgConfidence * 10) / 10,
+                    avg_tension: Math.round(avgTension * 10) / 10,
+                    avg_stability: Math.round(avgStability * 10) / 10,
+                    confidence_flow: historyConf,
+                    tension_flow: historyTens
+                }
+            })
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        renderFeedback(data);
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+        const reportData = await response.json();
+
+        renderFeedback(reportData);
 
     } catch (err) {
-        document.getElementById("modal-body").innerHTML = `
-      <div class="fb-text" style="color:var(--accent-red)">
-        ⚠️ 피드백 생성 실패: ${err.message}
-      </div>`;
+        console.error("[Final Report Error] 종합 피드백 생성 실패:", err);
+        if (summaryEl) summaryEl.textContent = "최종 분석 보고서를 생성하는 과정에서 통신 에러가 발생했습니다.";
     }
 }
 
@@ -309,14 +749,29 @@ function captureAndSend() {
     ctx.drawImage(video, 0, 0);
     const b64 = canvas.toDataURL("image/jpeg", 0.7);
 
-    document.getElementById("analyzing-indicator").classList.add("active");
+    const corners = document.querySelectorAll(".camera-overlay .corner");
+    corners.forEach(corner => corner.classList.add("active"));
+
     ws.send(JSON.stringify({ frame: b64 }));
-    setTimeout(() => document.getElementById("analyzing-indicator").classList.remove("active"), 400);
+    
+    setTimeout(() => {
+        corners.forEach(corner => corner.classList.remove("active"));
+    }, 400);
 }
 
 // ── UI 업데이트 ───────────────────────────────────────────────────────────
 function updateUI(data) {
     document.getElementById("latency-display").textContent = `${data.latency_ms} ms`;
+
+    if (data.face_detected === false) {
+        const feedbackEl = document.getElementById("face-feedback");
+        if (feedbackEl) {
+            feedbackEl.innerText = "화면에 얼굴이 감지되지 않습니다.\n카메라 정면을 바르게 바라봐주세요.";
+            feedbackEl.className = "null";
+        }
+        return;
+    }
+
     setMetric("confidence", data.confidence);
     setMetric("tension", data.tension);
     setMetric("stability", data.stability);
@@ -346,10 +801,10 @@ function setMetric(name, value) {
 
 function updateFeedback(conf, tens) {
     const el = document.getElementById("face-feedback");
-    if (conf >= 60 && tens <= 30) { el.textContent = "😊 좋은 표정입니다! 자신감이 느껴집니다."; el.className = "good"; }
-    else if (tens >= 60) { el.textContent = "😰 긴장이 많이 감지됩니다. 심호흡 해보세요."; el.className = "bad"; }
-    else if (conf < 40) { el.textContent = "🙂 조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
-    else { el.textContent = "👍 양호한 상태입니다."; el.className = "good"; }
+    if (conf >= 60 && tens <= 30) { el.innerText = "좋은 표정입니다!\n자신감이 느껴집니다."; el.className = "good"; }
+    else if (tens >= 60) { el.innerText = "긴장이 많이 감지됩니다.\n심호흡 해보세요."; el.className = "bad"; }
+    else if (conf < 40) { el.innerText = "조금 더 밝은 표정을 지어보세요."; el.className = "warn"; }
+    else { el.innerText = "양호한 상태입니다."; el.className = "good"; }
 }
 
 function updateEmotionGrid(raw) {
@@ -419,6 +874,20 @@ function setStatus(cls, text) {
 
 function updateInterval(val) {
     intervalSec = parseFloat(val);
-    document.getElementById("interval-label").textContent = val + "s";
+    document.getElementById("interval-label").textContent = intervalSec.toFixed(1) + "s";
     if (intervalId) startLoop();
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    const micButton = document.getElementById("btn-mic") || document.querySelector(".mic-feedback-bar");
+    
+    if (micButton) {
+        micButton.style.cursor = "pointer";
+        
+        micButton.addEventListener("click", () => {
+            if (silenceTimeoutId !== null) {
+                triggerSilenceTimeout();
+            }
+        });
+    }
+});

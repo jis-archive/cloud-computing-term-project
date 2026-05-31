@@ -44,17 +44,32 @@ def decode_frame(b64_data: str) -> np.ndarray:
 
 
 def analyze_frame(frame: np.ndarray) -> dict:
-    """DeepFace 분석 (CPU-friendly 백엔드: opencv)"""
-    result = DeepFace.analyze(
-        img_path=frame,
-        actions=["emotion"],
-        detector_backend="opencv",   # 가장 빠름 (CPU)
-        enforce_detection=False,     # 얼굴 없어도 에러 안 냄
-        silent=True,
-    )
-    # 결과가 리스트일 수 있음 (멀티페이스 대응)
-    emotions = result[0]["emotion"] if isinstance(result, list) else result["emotion"]
-    return calc_metrics(emotions)
+    """DeepFace 분석 (얼굴이 감지될 때만 분석 수행)"""
+    try:
+        result = DeepFace.analyze(
+            img_path=frame,
+            actions=["emotion"],
+            detector_backend="opencv",   # 가장 빠름 (CPU)
+            enforce_detection=True,      # ◀ 얼굴이 없으면 ValueError를 발생시킴
+            silent=True,
+        )
+        # 결과가 리스트일 수 있음 (멀티페이스 대응)
+        emotions = result[0]["emotion"] if isinstance(result, list) else result["emotion"]
+        
+        metrics = calc_metrics(emotions)
+        metrics["face_detected"] = True
+        return metrics
+
+    except ValueError as e:
+        if "Face could not be detected" in str(e):
+            return {
+                "face_detected": False,
+                "confidence": 0,
+                "tension": 0,
+                "stability": 0,
+                "raw": {k: 0.0 for k in ["happy", "neutral", "fear", "sad", "angry", "surprise", "disgust"]}
+            }
+        raise e
 
 
 # ── WebSocket 엔드포인트 ───────────────────────────────────────────────────────
