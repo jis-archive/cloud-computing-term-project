@@ -686,30 +686,6 @@ main {
 }
 
 .chat-message.system {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px dashed var(--border);
-    color: var(--text-muted);
-    align-self: center;
-    text-align: center;
-}
-
-.chat-message.interviewer {
-    background: rgba(6, 182, 212, 0.08);
-    border: 1px solid rgba(6, 182, 212, 0.2);
-    color: var(--text-primary);
-    align-self: flex-start;
-    border-bottom-left-radius: 2px;
-}
-
-.chat-message.interviewee {
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-    color: var(--text-primary);
-    align-self: flex-end;
-    border-bottom-right-radius: 2px;
-}
-
-.chat-message.system {
     text-align: center;
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-muted);
@@ -841,6 +817,26 @@ main {
     min-height: 38px;
     display: flex;
     align-items: center;
+}
+
+.silence-timer-container {
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.02);
+    position: relative;
+    overflow: hidden;
+    margin-top: 10px;
+    border-radius: 2px;
+}
+
+#silence-timer-bar {
+    width: 100%;
+    height: 100%;
+    background: var(--accent-red, #ef4444);
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    transform-origin: left center;
+    width: 100%;
+    transition: width 0.05s linear;
 }
 
 .panel::-webkit-scrollbar,

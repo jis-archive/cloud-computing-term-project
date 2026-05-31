@@ -97,7 +97,7 @@ async function startCamera() {
 
         const chatLog = document.getElementById("chat-log");
         if (chatLog) {
-            chatLog.innerHTML = `<div class="chat-message system">[시스템] LLM 면접관이 [${selectedJob}] 첫 질문을 출제하고 있습니다...</div>`;
+            chatLog.innerHTML = `<div class="chat-message system">LLM 면접관이 ${selectedJob} 면접의 첫 질문을 출제하고 있습니다...</div>`;
         }
         
         try {
@@ -120,7 +120,7 @@ async function startCamera() {
             }
         } catch (llmErr) {
             console.error("[LLM Start] 면접 오프닝 로드 실패:", llmErr);
-            appendChatLog("interviewer", `안녕하세요. 연결 상태가 원활하지 않아 기본 공통 질문을 드립니다. [${selectedJob}] 직무에 지원하게 된 동기와 준비 과정에 대해 말씀해 주세요.`);
+            appendChatLog("interviewer", `안녕하세요. 연결 상태가 원활하지 않아 기본 공통 질문을 드립니다. ${selectedJob} 직무에 지원하게 된 동기와 준비 과정에 대해 말씀해 주세요.`);
         }
         
         ["confidence", "tension", "stability"].forEach(name => {
@@ -168,6 +168,7 @@ async function startCamera() {
 function stopCamera() {
     stopLoop();
     stopMicVolumeAnalysis();
+    resetSilenceTimer();
     isAudioRecording = false;
 
     const jobInput = document.getElementById("job-input");
@@ -265,6 +266,7 @@ async function connectAudioWS() {
                     if (extractedText.length > 0) {
                         appendChatLog("interviewee", extractedText);
                         entireInterviewTranscript += extractedText + " ";
+                        startSilenceTimer();
                     }
                 }
                 
@@ -468,6 +470,67 @@ function stopMicVolumeAnalysis() {
         outerCircle.style.boxShadow = "none";
     }
     if (textPreview) textPreview.textContent = "마이크 입력 꺼짐";
+}
+
+let silenceTimeoutId = null;
+let timerAnimationFrameId = null;
+let silenceStartTime = null;
+const SILENCE_LIMIT_MS = 10000;
+
+function startSilenceTimer() {
+    resetSilenceTimer();
+
+    silenceStartTime = Date.now();
+    const timerBar = document.getElementById("silence-timer-bar");
+
+    silenceTimeoutId = setTimeout(() => {
+        triggerSilenceTimeout();
+    }, SILENCE_LIMIT_MS);
+
+    function updateProgress() {
+        if (!silenceStartTime) return;
+        
+        const elapsed = Date.now() - silenceStartTime;
+        const remainingPercentage = Math.max(0, 100 - (elapsed / SILENCE_LIMIT_MS) * 100);
+        
+        if (timerBar) {
+            timerBar.style.width = `${remainingPercentage}%`;
+        }
+
+        if (elapsed < SILENCE_LIMIT_MS) {
+            timerAnimationFrameId = requestAnimationFrame(updateProgress);
+        }
+    }
+    timerAnimationFrameId = requestAnimationFrame(updateProgress);
+}
+
+function resetSilenceTimer() {
+    if (silenceTimeoutId) {
+        clearTimeout(silenceTimeoutId);
+        silenceTimeoutId = null;
+    }
+    if (timerAnimationFrameId) {
+        cancelAnimationFrame(timerAnimationFrameId);
+        timerAnimationFrameId = null;
+    }
+    silenceStartTime = null;
+
+    const timerBar = document.getElementById("silence-timer-bar");
+    if (timerBar) {
+        timerBar.style.width = "100%";
+    }
+}
+
+function triggerSilenceTimeout() {
+    resetSilenceTimer();
+    console.log("[Turn Control] 5초 무음 감지 완료. 사용자의 답변이 끝난 것으로 판단합니다.");
+    
+    const chatLog = document.getElementById("chat-log");
+    if (chatLog) {
+        chatLog.innerHTML += `<div class="chat-message system">무음이 5초간 지속되어 답변이 제출되었습니다. 피드백을 생성합니다.</div>`;
+        chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────
