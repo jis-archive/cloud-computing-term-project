@@ -397,7 +397,7 @@ function handleVoiceActivityDetection(averageVolume) {
         
         if (!isSpeaking) {
             isSpeaking = true;
-            startSilenceTimer();
+            feedSilenceTimer();
             const textPreview = document.getElementById("mic-text-preview");
             if (textPreview) textPreview.textContent = "말하는 중...";
         }
@@ -546,6 +546,20 @@ function resetSilenceTimer() {
     if (timerBar) {
         timerBar.style.width = "100%";
     }
+}
+
+function feedSilenceTimer() {
+    if (!silenceStartTime) return;
+
+    silenceStartTime = Date.now();
+
+    if (silenceTimeoutId) {
+        clearTimeout(silenceTimeoutId);
+    }
+    
+    silenceTimeoutId = setTimeout(() => {
+        triggerSilenceTimeout();
+    }, SILENCE_LIMIT_MS);
 }
 
 function triggerSilenceTimeout() {
