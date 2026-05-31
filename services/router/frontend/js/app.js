@@ -502,7 +502,7 @@ function stopMicVolumeAnalysis() {
 let silenceTimeoutId = null;
 let timerAnimationFrameId = null;
 let silenceStartTime = null;
-const SILENCE_LIMIT_MS = 5000;
+const SILENCE_LIMIT_MS = 10000;
 
 function startSilenceTimer() {
     resetSilenceTimer();
