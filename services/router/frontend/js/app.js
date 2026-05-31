@@ -85,6 +85,9 @@ function connectWS() {
 // ── 카메라 ────────────────────────────────────────────────────────────────
 async function startCamera() {
     try {
+        entireInterviewTranscript = "";
+        latestSttResult = null;
+        
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
         document.getElementById("video").srcObject = stream;
         document.getElementById("btn-start").style.display = "none";
@@ -101,7 +104,9 @@ function stopCamera() {
     stopLoop();
     stopMicVolumeAnalysis();
     
-    if (mediaRecorder && mediaRecorder.state === "recording") {
+    isAudioRecording = false;
+    
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.onstop = async () => {
             if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
                 await sendCurrentSentence();
@@ -110,7 +115,7 @@ function stopCamera() {
                 audioStream.getTracks().forEach(t => t.stop());
                 audioStream = null;
             }
-            requestFeedback();
+            openModal();
         };
         mediaRecorder.stop();
     } else {
@@ -118,46 +123,47 @@ function stopCamera() {
             audioStream.getTracks().forEach(t => t.stop());
             audioStream = null;
         }
-        requestFeedback();
+        openModal();
     }
 
     if (ws) { ws.close(); ws = null; }
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (audioWs) { audioWs.close(); audioWs = null; }
     
     document.getElementById("video").srcObject = null;
     document.getElementById("btn-start").style.display = "block";
     document.getElementById("btn-stop").style.display = "none";
     setStatus("", "연결 대기중");
-    openModal();
 }
 
 // ── 오디오 WS (실시간 마이크) ────────────────────────────────────────────
 let audioWs = null;
 let mediaRecorder = null;
 let audioStream = null;
+let isAudioRecording = false;
 
 let sentenceChunks = [];
 let isSpeaking = false;
 let silenceStart = null;
 let entireInterviewTranscript = "";
 
-const SILENCE_THRESHOLD = 60;
-const SILENCE_DURATION = 1000;
+const SILENCE_THRESHOLD = 70;
+const SILENCE_DURATION = 800;
 
 async function connectAudioWS() {
     try {
         audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
         startMicVolumeAnalysis(audioStream);
         
         audioWs = new WebSocket(`${BASE_WS}/ws/audio`);
         
         audioWs.onopen = () => {
-            console.log("[Audio] 게이트웨이 음성 웹소켓 연결 성공 (발화 대기 중)");
+            console.log("[Audio] 게이트웨이 음성 웹소켓 연결 성공");
             sentenceChunks = [];
             isSpeaking = false;
             silenceStart = null;
+            isAudioRecording = true;
+            
+            startNewSentenceRecorder();
         };
         
         audioWs.onmessage = (event) => {
@@ -194,6 +200,35 @@ async function connectAudioWS() {
     } catch (err) {
         console.error("[Audio] 마이크 초기화 실패:", err);
     }
+}
+
+function startNewSentenceRecorder() {
+    if (!audioStream || !isAudioRecording) return;
+
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+    
+    mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+            sentenceChunks.push(e.data);
+            
+            if (!isSpeaking) {
+                if (sentenceChunks.length > 3) {
+                    sentenceChunks.shift();
+                }
+            }
+        }
+    };
+    
+    mediaRecorder.onstop = async () => {
+        if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
+            await sendCurrentSentence();
+        }
+        if (isAudioRecording) {
+            startNewSentenceRecorder();
+        }
+    };
+    
+    mediaRecorder.start(100);
 }
 
 let micAudioContext = null;
@@ -254,36 +289,33 @@ function startMicVolumeAnalysis(stream) {
 }
 
 function handleVoiceActivityDetection(averageVolume) {
-    if (!audioWs || audioWs.readyState !== WebSocket.OPEN || !audioStream) {
+    if (!audioWs || audioWs.readyState !== WebSocket.OPEN || !mediaRecorder) {
         return;
     }
 
     if (averageVolume > SILENCE_THRESHOLD) {
+        silenceStart = null;
+        
         if (!isSpeaking) {
             isSpeaking = true;
-            silenceStart = null; 
-            console.log(`[VAD] 임계값 초과 (${averageVolume.toFixed(1)}). 문장 스트림 녹음을 개시합니다.`);
-            
-            startSentenceRecording();
+            console.log(`[VAD] 확실한 발화 구간 감지 (데시벨: ${averageVolume.toFixed(1)}). 버퍼 보존 모드 진입.`);
             
             const textPreview = document.getElementById("mic-text-preview");
-            if (textPreview) textPreview.textContent = "말하는 중...";
-        } else {
-            silenceStart = null;
+            if (textPreview) textPreview.textContent = "말씀하시는 중...";
         }
     } else {
         if (isSpeaking) {
             if (silenceStart === null) {
-                silenceStart = Date.now(); // 무음 시작 시점 기록
+                silenceStart = Date.now();
             } else if (Date.now() - silenceStart >= SILENCE_DURATION) {
-                console.log(`[VAD] 문장 마침 확정 (${SILENCE_DURATION}ms 무음 지속). 스트림을 마감합니다.`);
+                console.log(`[VAD] 문장 마침 확정 (${SILENCE_DURATION}ms 무음 유지). 레코더 리사이클 트리거.`);
+                
+                if (mediaRecorder && mediaRecorder.state === "recording") {
+                    mediaRecorder.stop();
+                }
                 
                 isSpeaking = false;
                 silenceStart = null;
-                
-                if (mediaRecorder && mediaRecorder.state === "recording") {
-                    mediaRecorder.stop(); 
-                }
                 
                 const textPreview = document.getElementById("mic-text-preview");
                 if (textPreview) textPreview.textContent = "AI 문장 분석 중...";
@@ -292,40 +324,22 @@ function handleVoiceActivityDetection(averageVolume) {
     }
 }
 
-function startSentenceRecording() {
-    sentenceChunks = [];
-    
-    mediaRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
-    
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-            sentenceChunks.push(e.data);
-        }
-    };
-    
-    mediaRecorder.onstop = async () => {
-        console.log(`[Recorder] 순수 발화 세그먼트 수집 완료. 파편 개수: ${sentenceChunks.length}`);
-        if (sentenceChunks.length > 0 && audioWs && audioWs.readyState === WebSocket.OPEN) {
-            await sendCurrentSentence();
-        }
-    };
-    
-    mediaRecorder.start(100);
-}
-
 async function sendCurrentSentence() {
+    if (sentenceChunks.length === 0) return;
+    
     const sentenceBlob = new Blob(sentenceChunks, { type: "audio/webm" });
-    sentenceChunks = [];
+    
+    sentenceChunks = []; 
     
     try {
         const arrayBuffer = await sentenceBlob.arrayBuffer();
         if (audioWs && audioWs.readyState === WebSocket.OPEN) {
             audioWs.send(arrayBuffer);
             audioWs.send(JSON.stringify({ type: "end_of_audio" }));
-            console.log("[VAD] 순수 대화 구간 바이너리 전송 완결");
+            console.log("[VAD] 발화 세그먼트 추출 바이너리 송신 완결");
         }
     } catch (err) {
-        console.error("[VAD] 오디오 패킷 포워딩 실패:", err);
+        console.error("[VAD] 오디오 바이너리 포워딩 실패:", err);
     }
 }
 
@@ -384,6 +398,14 @@ function closeModal() {
 
 // ── LLM 피드백 요청 ───────────────────────────────────────────────────────
 async function requestFeedback() {
+    if (!latestSttResult && entireInterviewTranscript.trim().length > 0) {
+        latestSttResult = {
+            text: entireInterviewTranscript.trim(),
+            language: "ko",
+            duration: 0
+        };
+    }
+
     if (!latestSttResult) {
         const arrived = await waitForStt(30000);
         if (!arrived) {
@@ -394,7 +416,7 @@ async function requestFeedback() {
     const emotion = latestEmotionResult ?? { confidence: 0, tension: 0, stability: 0, raw: {} };
     const stt = latestSttResult ?? { text: "", language: "ko", duration: 0 };
 
-    console.log("[Feedback] 요청 payload:", { stt_result: stt, emotion_result: emotion });
+    console.log("[Feedback] 최종 전송 payload:", { stt_result: stt, emotion_result: emotion });
 
     try {
         const res = await fetch(LLM_URL, {
