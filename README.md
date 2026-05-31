@@ -23,6 +23,10 @@ cloud-computing-term-project/
     │   ├── Dockerfile
     │   ├── requirements.txt
     │   ├── frontend/
+    │   │   ├── css/
+    │   │   │   └── style.css
+    │   │   ├── js/
+    │   │   │   └── app.js
     │   │   └── index.html
     │   └── src/
     │       └── main.py

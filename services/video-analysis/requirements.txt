@@ -1,7 +1,7 @@
-fastapi==0.115.12
-uvicorn[standard]==0.34.2
 deepface==0.0.93
-opencv-python-headless==4.10.0.84
+fastapi==0.115.12
 numpy==1.26.4
+opencv-python-headless==4.10.0.84
 Pillow==10.4.0
 tf-keras==2.19.0
+uvicorn[standard]==0.34.2
