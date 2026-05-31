@@ -619,42 +619,44 @@ function closeModal() {
 
 // ── LLM 피드백 요청 ───────────────────────────────────────────────────────
 async function requestFeedback() {
-    if (!latestSttResult && entireInterviewTranscript.trim().length > 0) {
-        latestSttResult = {
-            text: entireInterviewTranscript.trim(),
-            language: "ko",
-            duration: 0
-        };
-    }
+    const totalRecords = historyConf.length;
+    const avgConfidence = totalRecords > 0 ? (historyConf.reduce((a, b) => a + b, 0) / totalRecords) : 0;
+    const avgTension = totalRecords > 0 ? (historyTens.reduce((a, b) => a + b, 0) / totalRecords) : 0;
+    const avgStability = Math.max(0, 100 - avgTension);
+    
+    const jobInput = document.getElementById("job-input");
+    const selectedJob = jobInput ? jobInput.value.trim() : "개발자";
 
-    if (!latestSttResult) {
-        const arrived = await waitForStt(30000);
-        if (!arrived) {
-            console.warn("[Feedback] STT 타임아웃 — 감정 데이터만으로 피드백 진행");
-        }
-    }
-
-    const emotion = latestEmotionResult ?? { confidence: 0, tension: 0, stability: 0, raw: {} };
-    const stt = latestSttResult ?? { text: "", language: "ko", duration: 0 };
-
-    console.log("[Feedback] 최종 전송 payload:", { stt_result: stt, emotion_result: emotion });
+    const summaryEl = document.getElementById("modal-speech-summary");
+    if (summaryEl) summaryEl.textContent = "인공지능이 면접 스크립트 문맥과 표정 흐름을 종합 심사 중입니다...";
 
     try {
-        const res = await fetch(LLM_URL, {
+        const response = await fetch(LLM_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stt_result: stt, emotion_result: emotion }),
+            body: JSON.stringify({
+                is_start: false,
+                is_chat_turn: false,
+                job: selectedJob,
+                history: interviewSessionHistory,
+                emotion_timeline: {
+                    avg_confidence: Math.round(avgConfidence * 10) / 10,
+                    avg_tension: Math.round(avgTension * 10) / 10,
+                    avg_stability: Math.round(avgStability * 10) / 10,
+                    confidence_flow: historyConf,
+                    tension_flow: historyTens
+                }
+            })
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        renderFeedback(data);
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+        const reportData = await response.json();
+
+        renderFeedback(reportData);
 
     } catch (err) {
-        document.getElementById("modal-body").innerHTML = `
-      <div class="fb-text" style="color:var(--accent-red)">
-        피드백 생성 실패: ${err.message}
-      </div>`;
+        console.error("[Final Report Error] 종합 피드백 생성 실패:", err);
+        if (summaryEl) summaryEl.textContent = "최종 분석 보고서를 생성하는 과정에서 통신 에러가 발생했습니다.";
     }
 }
 
