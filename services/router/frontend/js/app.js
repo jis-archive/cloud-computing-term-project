@@ -877,3 +877,17 @@ function updateInterval(val) {
     document.getElementById("interval-label").textContent = intervalSec.toFixed(1) + "s";
     if (intervalId) startLoop();
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    const micButton = document.getElementById("btn-mic") || document.querySelector(".mic-feedback-bar");
+    
+    if (micButton) {
+        micButton.style.cursor = "pointer";
+        
+        micButton.addEventListener("click", () => {
+            if (silenceTimeoutId !== null) {
+                triggerSilenceTimeout();
+            }
+        });
+    }
+});
