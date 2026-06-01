@@ -1,130 +1,80 @@
-# 면접 분석 서비스 실행 가이드
+# Azure Container Apps(ACA) 기반의 AI 모의 면접 서비스
 
-## 사전 준비
+<br>
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) 설치 및 실행
-- 프로젝트 루트에 `.env` 파일 생성
+## 팀원 및 담당 파트
 
-```
-# .env
-GROQ_API_KEY=your_actual_groq_api_key
-```
+| 이름 | 담당 파트 |
+|------|-----------|
+| 강지원 | - |
+| 김영빈 | - |
+| 한지석 | - |
 
----
+<br>
 
-## 디렉토리 구조
+## 프로젝트 소개
+본 프로젝트는 **실시간 영상 분석(DeepFace)**, **음성 인식(Whisper)**, **피드백 생성(LLM)** 모듈을 독립된 **마이크로서비스 아키텍처(MSA)** 구조로 분리하고, 이를 클라우드 네이티브 인프라와 융합하여 서비스 가용성을 극대화한 **AI 모의 면접 서비스**이다.
 
-```
-cloud-computing-term-project/
-├── docker-compose.yml
-├── .env
-└── services/
-    ├── router/
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   ├── frontend/
-    │   │   ├── css/
-    │   │   │   └── style.css
-    │   │   ├── js/
-    │   │   │   └── app.js
-    │   │   └── index.html
-    │   └── src/
-    │       └── main.py
-    ├── video-analysis/
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   └── src/
-    │       └── main.py
-    ├── audio-stt/
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   └── src/
-    │       └── main.py
-    └── llm-feedback/
-        ├── Dockerfile
-        ├── requirements.txt
-        └── src/
-            └── main.py
-```
+ 각 기능 모듈을 독립된 마이크로서비스로 쪼개어 Docker 컨테이너로 패키징되어 완전관리형 서버리스 플랫폼인 **Azure Container Apps(ACA)** 환경에 배포된다. 이를 통해 내장된 인그레스를 통한 효율적인 트래픽 분산과, 실시간 부하 및 이벤트 기반의 유연한 자동 확장(Auto-Scaling), 그리고 무부하 시 리소스를 0 으로 축소(Scale-to-Zero)하는 고가용성 및 비용 최적화된 안정적인 서비스 구조를 갖춘다.
 
----
+<br>
 
-## 실행 방법
+## 프로젝트 필요성 소개
+ 통계청에 따르면 청년 취업 준비생이 58만 명에 달할 정도로 면접 연습 수요가 높지만, 대면 모의 면접이나 전문 컨설팅은 시간과 비용 부담이 크고 객관적인 자가 평가가 어렵다. 본 서비스는 웹 브라우저만으로 언제 어디서나 객관적인 멀티모달 평가 리포트를 제공하여 이 문제에 대한 해결책을 제시한다.
 
-### 1. 빌드 (최초 1회 또는 코드 변경 시)
+ 또한, 고부하 AI 모델 서빙은 초기 투자 비용과 관리 인력이 부족한 스타트업 및 중소기업에 큰 진입 장벽이다. 이를 해결하기 위해 Azure Container Apps(ACA) 기반의 서버리스 인프라를 채택하여, 유휴 상태에는 자원을 완전히 끄는 Scale-to-Zero로 비용 낭비를 막고 트래픽 증가 시에만 동적으로 오토스케일링한다. 결과적으로 초기 인프라 투자 없이도 고가용성 AI 서빙 환경을 안정적으로 운영하여 기술 도입의 비용 효율성을 극대화한다.
 
-```bash
-docker compose build
-```
+<br>
 
-> video-analysis(DeepFace), audio-stt(Whisper) 는 이미지 크기가 크므로 빌드에 시간이 걸립니다.
+## 관련 기술 조사
 
-### 2. 실행
+**뷰인터**
+
+뷰인터는 대기업 AI 면접 환경을 그대로 구현한 플랫폼으로, 면접 중 실시간 경고 대신 면접이 끝난 후 수 분 이내에 종합 분석 리포트를 제공한다. 지원자의 음성(발음 명료도, 목소리 톤), 영상(시선 집중도, 표정 변화), 그리고 답변 내용(직무 키워드, 논리 구조)을 멀티모달 방식으로 각각 분리하여 정밀 분석하며, 최종적으로 취약 구간 타임스탬프와 요소별 방사형 그래프를 통해 시선 처리나 긴장도 등 고쳐야 할 약점을 직관적으로 짚어준다.
+
+**Azure Container Apps**
+
+Azure Container Apps(ACA)는 쿠버네티스의 복잡한 인프라 관리 없이 컨테이너를 운영하는 완전관리형 서버리스 플랫폼이다. 내장된 KEDA를 통해 트래픽에 맞춰 정교하게 오토스케일링하며, 유휴 상태 시 **Scale-to-Zero(0으로 축소)** 및 초 단위 과금으로 비용을 최소화한다.
+
+또한, **Dapr 통합**으로 마이크로서비스 간 호출이 안정적이고, **자체 리비전 관리**를 통해 블루-그린 무중단 배포와 트래픽 제어를 직관적으로 수행한다. 내장형 인그레스와 Azure Monitor까지 기본 제공하여 복잡한 설정 없이도 고가용성 AI 모듈 서빙 인프라를 효율적으로 구축할 수 있다.
+
+**Blue-Green 배포**
+
+두 개의 동일한 운영 환경을 동시에 실행하여 **무중단 배포**를 달성하고 **빠른 롤백**을 가능하게 하는 소프트웨어 릴리즈 전략을 의미한다. 똑같은 서버 환경 2개(구버전, 신버전)을 만들어 두고, 라우팅 스위치만 꺾어서 한 번에 사용자들을 이동시키는 배포방식이다.
+
+<br>
+
+## 시스템 아키텍처
+<img width="1715" height="979" alt="cc-aca-diagram" src="https://github.com/user-attachments/assets/fd507475-7f73-46f8-bad8-cdfa9280fd73" />
+
+<br>
+
+## 설치 및 실행 방법
+
+> 작성 예정
 
 ```bash
-docker compose up -d
+# 예시
+git clone https://github.com/your-repo/ai-interview-service.git
+cd ai-interview-service
 ```
 
-### 3. 상태 확인
+<br>
 
-```bash
-docker compose ps
-```
+## 활용 방안
 
-4개 서비스가 모두 `Up` 상태이면 정상입니다.
+### 👤 사용자 관점 — 개인 맞춤형 상시 면접 훈련 플랫폼
+- 시공간 제약 없이 웹 브라우저만으로 대면 컨설팅 수준의 면접 연습 반복 가능
+- 정량화된 멀티모달 분석 리포트와 타임스탬프 기반 피드백으로 취약점 자가 진단
+- 시선 처리·감정 변화·답변 논리 구조를 스스로 파악하고 개선하는 **자가 학습 도구**
 
-```
-router           Up    0.0.0.0:8000->8000/tcp
-video-analysis   Up    0.0.0.0:8001->8001/tcp
-audio-stt        Up    0.0.0.0:8002->8002/tcp
-llm-feedback     Up    0.0.0.0:8003->8003/tcp
-```
+### 🏢 개발자 및 기업 관점 — Plug-and-Play형 AI 면접 솔루션
+- 각 분석 기능을 MSA 모듈로 분리·컨테이너화하여 **모듈 단위 독립 교체** 가능
+- **커스텀 fine-tuning LLM**, **고도화된 안면 인식 모델** 등 교체 시 전체 재구축 불필요
+- 특정 기업·직군별 특화 AI 모델 도입이 용이한 **확장성 높은 아키텍처**
 
-### 4. 접속
+<br>
 
-브라우저에서 아래 주소로 접속합니다.
+## AI 활용
 
-```
-http://localhost:8000
-```
-
----
-
-## 종료 방법
-
-```bash
-docker compose down
-```
-
----
-
-## 문제 해결
-
-**로그 확인**
-```bash
-# 전체 로그
-docker compose logs
-
-# 특정 서비스 로그
-docker compose logs router
-docker compose logs video-analysis
-docker compose logs audio-stt
-docker compose logs llm-feedback
-```
-
-**특정 서비스만 재빌드**
-```bash
-docker compose build router
-docker compose up -d
-```
-
-**헬스체크**
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8001/health
-curl http://localhost:8002/health
-curl http://localhost:8003/health
-```
-
-> `unhealthy` 표시가 있어도 각 헬스체크에서 응답이 오면 정상 동작 중입니다.  
-> video-analysis는 TensorFlow 로딩으로 인해 시작이 느릴 수 있습니다.
+> 사용한 AI 도구 및 코드 기여 비율 작성 예정
