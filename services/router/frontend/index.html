@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InterviewAI · Emotion</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700&family=Space+Mono:wght@400;700&display=swap"
+    rel="stylesheet" />
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">InterviewAI · Emotion</div>
+    <div id="status-badge">
+      <div id="status-dot"></div>
+      <span id="status-text">연결 대기중</span>
+    </div>
+  </header>
+
+  <main>
+
+    <div class="modal-backdrop" id="feedback-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">최종 면접 피드백</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div id="modal-body">
+          <div class="spinner">피드백 생성 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-wrapper">
+      <div class="panel">
+        <div class="card">
+          <div class="card-title">핵심 지표</div>
+          <div class="big-metrics">
+            <div class="metric-item">
+              <div class="metric-header">
+                <div class="metric-label"><span class="dot confidence"></span>자신감</div>
+                <div class="metric-value" id="confidence-value">--</div>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="confidence-fill"></div>
+              </div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-header">
+                <div class="metric-label"><span class="dot tension"></span>긴장도</div>
+                <div class="metric-value" id="tension-value">--</div>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="tension-fill"></div>
+              </div>
+            </div>
+            <div class="metric-item">
+              <div class="metric-header">
+                <div class="metric-label"><span class="dot stability"></span>안정도</div>
+                <div class="metric-value" id="stability-value">--</div>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" id="stability-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="face-feedback">면접을 시작하면 분석을 시작합니다</div>
+
+        <div class="card">
+          <div class="card-title">감정 세부 수치</div>
+          <div class="emotion-grid" id="emotion-grid">
+            <div class="empty-state" style="grid-column:1/3">분석 대기 중...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">추이 그래프</div>
+          <canvas id="history-canvas"></canvas>
+        </div>
+
+        <input type="file" accept="video/mp4,video/webm,audio/*" onchange="handleFileUpload(event)"
+          style="display: none;">
+        <span id="upload-status" style="display: none;"></span>
+      </div>
+    </div>
+
+    <section class="camera-section" oncontextmenu="return false;">
+      <div class="camera-wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="camera-overlay">
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          <div id="latency-display">-- ms</div>
+        </div>
+        <button id="btn-start" onclick="startCamera()">면접 시작</button>
+        <button id="btn-stop" onclick="stopCamera()">면접 중지</button>
+      </div>
+
+      <div class="card" style="padding:14px 20px">
+        <div class="interval-row">
+          <label>분석 간격</label>
+          <input type="range" id="interval-slider" min="0.5" max="5.0" step="0.5" value="1.0"
+            oninput="updateInterval(this.value)" />
+          <span id="interval-label">1.0s</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="chat-wrapper">
+      <section class="chat-section">
+        <div class="card chat-card">
+          <div class="card-header-group">
+            <div class="card-title">Interview Script</div>
+            <div class="job-control-bar">
+              <label for="job-input">직종:</label>
+              <input type="text" id="job-input" value="개발자" placeholder="직무 입력">
+            </div>
+          </div>
+
+          <div class="chat-log" id="chat-log">
+            <div class="chat-message system">면접 시작 버튼을 누르면 AI 면접관과의 대화가 개시됩니다.</div>
+          </div>
+
+          <div class="silence-timer-container">
+            <div id="silence-timer-bar"></div>
+          </div>
+
+          <div class="mic-feedback-bar">
+            <div class="mic-circle-outer" id="mic-outer">
+              <div class="mic-circle-inner" id="mic-inner"></div>
+              <svg class="mic-icon" viewBox="0 0 24 24">
+                <path fill="currentColor"
+                  d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 2.76-2.24 5-5.3 5s-5.3-2.24-5.3-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-1.7z" />
+              </svg>
+            </div>
+            <div class="mic-text-preview" id="mic-text-preview">마이크 입력 꺼짐</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script src="./js/app.js"></script>
+</body>
+
+</html>

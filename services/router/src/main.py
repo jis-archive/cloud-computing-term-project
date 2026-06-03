@@ -3,6 +3,7 @@ import json
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import websockets
 import httpx
 
@@ -82,8 +83,6 @@ async def audio_router(client_ws: WebSocket):
                         print(f"[STT 결과] {parsed.get('text', '')}")
                         await client_ws.send_text(stt_result)
         
-        await client_ws.send_text(stt_result)
-
     except WebSocketDisconnect:
         print("[Router] 프론트엔드 음성 웹소켓 연결 끊김")
     except websockets.exceptions.ConnectionClosed:
@@ -105,6 +104,7 @@ async def feedback_proxy(request: Request):
 def health_check():
     return {"status": "healthy"}
 
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
