@@ -191,7 +191,6 @@ ACR_NAME=interviewacr          # 전역 고유 이름
 ACA_ENV=interview-env
 ```
 
----
 
 ## 1. 리소스 그룹 & ACR 생성
 
@@ -205,7 +204,7 @@ az acr create \
   --admin-enabled true
 ```
 
----
+
 
 ## 2. 이미지 빌드 & ACR 푸시
 
@@ -225,7 +224,7 @@ done
 > 이미 ACR에 이미지들을 빌드 했다면 생략
 > 
 
----
+
 
 ## 3. Container Apps Environment 생성
 
@@ -236,7 +235,7 @@ az containerapp env create \
   --location $LOCATION
 ```
 
----
+
 
 ## 4. ACR 자격증명 확인
 
@@ -245,7 +244,7 @@ ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username -o tsv)
 ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query "passwords[0].value" -o tsv)
 ```
 
----
+
 
 ## 5. 내부 서비스 배포 (Internal Ingress)
 
@@ -301,7 +300,7 @@ az containerapp create \
   --env-vars GROQ_API_KEY=secretref:groq-api-key
 ```
 
----
+
 
 ## 6. Secret 등록 (GROQ_API_KEY)
 
@@ -312,7 +311,6 @@ az containerapp secret set \
   --secrets groq-api-key=<자신의 Groq API-KEY>
 ```
 
----
 
 ## 7. 내부 FQDN 확인
 
@@ -339,7 +337,7 @@ echo "AUDIO : $AUDIO_FQDN"
 echo "LLM   : $LLM_FQDN"
 ```
 
----
+
 
 ## 8. router 서비스 배포 (External Ingress)
 
@@ -368,7 +366,7 @@ az containerapp create \
 > 내부 통신이라도 `wss://`, `https://` 를 사용하세요.
 > 
 
----
+
 
 ## 9. router 외부 URL 확인
 
@@ -381,7 +379,7 @@ ROUTER_URL=$(az containerapp show \
 echo "Router URL: https://$ROUTER_URL"
 ```
 
----
+
 
 ## 10. 리소스 정리
 
@@ -391,13 +389,17 @@ az group delete --name $RESOURCE_GROUP --yes
 
 ---
 
+
 ### 웹 사용 설명
+
 
 [초기 화면]
 
 ![스크린샷 2026-06-02 오후 7.49.52.png](images/초기화면.png)
 
 - 면접 시작버튼을 눌러 면접을 시작할 수 있습니다.
+
+
 
 [면접 중 화면]
 
@@ -406,11 +408,13 @@ az group delete --name $RESOURCE_GROUP --yes
 - 면접 중에는 카메라와 마이크가 활성화되며, 유저는 오른쪽 화면에 AI 면접관이 생성한 질문에 대한 답변을 시작하면 됩니다.
 - 답변은 음성인식을 통해 오른쪽 화면에 기록되며, 면접 중 유저의 표정 변화에 따른 감정 변화를 수치화하여 왼쪽 화면과 같이 제공됩니다.
 
+
 [면접 결과 및 피드백 화면]
 
 ![스크린샷 2026-06-02 오후 7.51.10.png](images/결과화면.png)
 
 - 면집 진행 후 면접 중지 버튼을 누르면 영상 및 음성을 분석하여 LLM 피드백이 제공됩니다.
+
 
 # 개발 결과물의 활용방안 소개
 
@@ -418,6 +422,7 @@ az group delete --name $RESOURCE_GROUP --yes
 
 - **사용자 관점: 개인 맞춤형 상시 면접 훈련 플랫폼**
 취업 준비생들은 시공간의 제약 없이 웹 브라우저만을 활용해 대면 컨설팅 수준의 면접 연습을 반복할 수 있다. 정량화된 멀티모달 분석 리포트와 타임스탬프 기반의 피드백을 통해 본인의 시선 처리, 감정 변화, 답변 논리 구조의 취약점을 스스로 파악하고 개선하는 자가 학습 도구로 활용 가능하다.
+
 - **개발자 및 기업 관점: 플러그앤플레이(Plug-and-Play)형 AI 면접 솔루션**
 본 프로젝트는 각 분석 기능을 마이크로서비스(MSA) 모듈로 분리하고 Docker 컨테이너로 가상화하여 설계했다. 따라서 향후 특정 기업이나 직군별로 특화된 자체 AI 모델(예: 커스텀 fine-tuning된 LLM이나 고도화된 안면 인식 모델)이 개발되더라도, 전체 시스템을 재구축할 필요 없이 해당 컨테이너 모듈만 독립적으로 교체(Plug-and-Play)하여 쉽게 시스템을 고도화할 수 있다.
 
